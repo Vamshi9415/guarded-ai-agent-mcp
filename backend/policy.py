@@ -32,8 +32,7 @@ class PolicyEngine:
 
     @classmethod
     async def evaluate_tool(
-        cls, server_id: str, tool_name: str, tool_args: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        cls, qualified_tool_name: str, tool_args: Dict[str, Any]    ) -> Dict[str, Any]:
         rules_col = _rules_col()
 
         # 1. Check BLOCK rules (highest priority --- deny immediately)
