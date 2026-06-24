@@ -2,7 +2,7 @@ import os
 from google import genai
 from google.genai import types
 
-from mcp_infrastructure.manager import McpClientManager
+from mcp_infra.manager import McpClientManager
 from policy import PolicyEngine
 from db import log_tool_action
 
