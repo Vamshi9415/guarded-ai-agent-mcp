@@ -174,8 +174,34 @@ class GuardedAgent:
                     result_data = {"error": f"Security Exception: Action Denied. Reason: {decision['reason']}"}
                 
                 elif decision["action"] == "REQUIRE_APPROVAL":
-                    # Handled via your FastAPI sync wait-gates
-                    result_data = {"status": "Suspended: Awaiting real-time supervisor verification."}
+    # 1. Create a pending request in MongoDB
+                    from .db import create_approval_request, get_approvals_collection
+                    from bson.objectid import ObjectId
+                    import asyncio
+                    
+                    approval_id = create_approval_request(conversation_id, server_id, tool_name, tool_args)
+                    print(f"⏸️ Agent paused. Awaiting human approval for ticket: {approval_id}")
+                    
+                    # 2. Poll the database for an answer (max 60 seconds)
+                    approved = False
+                    for _ in range(30): # Poll every 2 seconds for 60 seconds
+                        await asyncio.sleep(2)
+                        ticket = get_approvals_collection().find_one({"_id": ObjectId(approval_id)})
+                        
+                        if ticket and ticket["status"] == "approved":
+                            approved = True
+                            break
+                        elif ticket and ticket["status"] == "denied":
+                            break
+                            
+                    # 3. Handle the outcome
+                    if approved:
+                        print("✅ Human approved! Executing tool...")
+                        mcp_output = await self.mcp_manager.call_tool_safe(qualified_name, tool_args)
+                        result_data = {"result": getattr(mcp_output, 'content', str(mcp_output))}
+                    else:
+                        print("❌ Human denied or request timed out.")
+                        result_data = {"error": "Security Exception: Action explicitly rejected by admin or timed out."}
                 
                 else:
                     # ALLOWED: Securely route execution to your McpClientManager context stacks
