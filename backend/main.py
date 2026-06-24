@@ -24,8 +24,12 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from agent import GuardedAgent
-from db import (
+if __package__ in (None, ""):
+    import sys
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+from backend.agent import GuardedAgent
+from backend.db import (
     create_rule, get_all_rules, toggle_rule, delete_rule,
     get_pending_approvals, resolve_approval, get_recent_logs,
 )
@@ -113,12 +117,7 @@ def list_rules():
 
 @app.post("/api/rules", status_code=201)
 def add_rule(body: RuleCreate):
-    rule_id = create_rule(
-        tool_name=body.tool_name,
-        action=body.action,
-        reason=body.reason,
-        config=body.config,
-    )
+    rule_id = create_rule(body.model_dump())
     return {"id": rule_id}
 
 

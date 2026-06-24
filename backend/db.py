@@ -1,10 +1,10 @@
 """
-db.py — MongoDB Atlas connection + audit logging
+db.py --- MongoDB Atlas connection + audit logging
 All tool calls (allowed, blocked, pending) are logged here.
 Collections:
-  guarded_ai.tool_logs      — audit trail of every tool call
-  guarded_ai.guardrail_rules — policy rules (read by PolicyEngine)
-  guarded_ai.approvals       — pending approval requests
+  wms_database.tool_logs      --- audit trail of every tool call
+  wms_database.guardrail_rules --- policy rules (read by PolicyEngine)
+  wms_database.approvals       --- pending approval requests
 """
 
 import os
@@ -13,21 +13,25 @@ from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
 from typing import Any, Dict, Optional
 
+from .mongo_config import get_mongo_db_name, get_mongo_heartbeat_ms, get_mongo_uri
+
 
 # --- Connection -------------------------------------------------------
-MONGODB_URI = os.environ.get("MONGODB_URI", "mongodb://localhost:27017")
+MONGODB_URI = get_mongo_uri()
+MONGODB_DB_NAME = get_mongo_db_name()
 
 _mongo_client: Optional[MongoClient] = None
 
 
 def get_db():
-    """Lazy singleton — reuse the same MongoClient across the app lifetime."""
+    """Lazy singleton --- reuse the same MongoClient across the app lifetime."""
     global _mongo_client
     if _mongo_client is None:
         _mongo_client = MongoClient(
             MONGODB_URI,
             serverSelectionTimeoutMS=5000,
             connectTimeoutMS=5000,
+            heartbeatFrequencyMS=get_mongo_heartbeat_ms(),
         )
         # Quick ping to verify connection works on first use
         try:
@@ -35,7 +39,7 @@ def get_db():
             print("MongoDB connected successfully")
         except ConnectionFailure as e:
             print(f"MongoDB connection failed: {e}")
-    return _mongo_client["guarded_ai"]
+    return _mongo_client[MONGODB_DB_NAME]
 
 
 # --- Collections convenience ------------------------------------------
@@ -80,6 +84,8 @@ async def log_tool_action(
 # --- Rules CRUD -------------------------------------------------------
 def create_rule(rule: Dict[str, Any]) -> str:
     """Insert a new guardrail rule. Returns the new rule's string ID."""
+    if "action" in rule:
+        rule["action"] = str(rule["action"]).upper()
     rule["created_at"] = datetime.now(timezone.utc)
     rule.setdefault("enabled", True)
     result = get_rules_collection().insert_one(rule)
@@ -89,16 +95,28 @@ def create_rule(rule: Dict[str, Any]) -> str:
 def get_all_rules() -> list:
     """Return all guardrail rules as plain dicts."""
     rules = []
-    for r in get_rules_collection().find({}, {"_id": 0}):
+    for r in get_rules_collection().find({}):
+        r["_id"] = str(r["_id"])
+        if "created_at" in r:
+            r["created_at"] = r["created_at"].isoformat()
+        if "updated_at" in r:
+            r["updated_at"] = r["updated_at"].isoformat()
         rules.append(r)
     return rules
 
 
-def toggle_rule(rule_id: str, enabled: bool) -> bool:
-    """Enable or disable a rule by its string ID."""
+def toggle_rule(rule_id: str, enabled: bool | None = None) -> bool:
+    """Enable, disable, or flip a rule by its string ID."""
     from bson import ObjectId
+    object_id = ObjectId(rule_id)
+    if enabled is None:
+        existing = get_rules_collection().find_one({"_id": object_id}, {"enabled": 1})
+        if not existing:
+            return False
+        enabled = not existing.get("enabled", True)
+
     result = get_rules_collection().update_one(
-        {"_id": ObjectId(rule_id)},
+        {"_id": object_id},
         {"$set": {"enabled": enabled, "updated_at": datetime.now(timezone.utc)}},
     )
     return result.modified_count > 0

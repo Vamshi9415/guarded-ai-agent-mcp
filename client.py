@@ -2,19 +2,21 @@ import asyncio
 import os
 from contextlib import AsyncExitStack
 
+from dotenv import load_dotenv
+
 from mcp import ClientSession
 from mcp.client.stdio import stdio_client, StdioServerParameters
 from mcp.client.sse import sse_client
 
 
 async def main():
-    import os
+    load_dotenv()
 
     IS_CLOUD = os.environ.get("ENVIRONMENT") == "production"
 
     servers = {
     "local-file-mcp": {
-        "type": "stdio",                    # always stdio — your own server
+        "type": "stdio",                    # always stdio --- your own server
         "command": "python",
         "args": ["mcp-server/server.py"],
         "env": {**os.environ, "SANDBOX_DIR": "./sandbox"},
@@ -77,4 +79,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-    

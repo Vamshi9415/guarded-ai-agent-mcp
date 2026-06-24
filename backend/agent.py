@@ -1,25 +1,83 @@
 import os
+os.environ.pop("SSLKEYLOGFILE", None)
+import shlex
+from pathlib import Path
+
+from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-from mcp_infrastructure.manager import McpClientManager
-from policy import PolicyEngine
-from db import log_tool_action
+from .mcp_infra.manager import McpClientManager
+from .policy import PolicyEngine
+from .db import log_tool_action
+
+
+load_dotenv(Path(__file__).resolve().parents[1] / '.env')
+
+
+def _get_gemini_api_key(api_key: str | None = None) -> str:
+    resolved_api_key = api_key or os.getenv('GEMINI_API_KEY')
+    if not resolved_api_key:
+        raise ValueError('GEMINI_API_KEY is missing. Add it to your .env file.')
+    return resolved_api_key
+
 
 class GuardedAgent:
-    def __init__(self, mcp_manager: McpClientManager, api_key: str = None):
+    def __init__(self, mcp_manager: McpClientManager | None = None, api_key: str = None):
         """
         Initializes the Guarded Gemini Agent.
         Requires the `google-genai` package.
         """
-        self.mcp_manager = mcp_manager
+        self.mcp_manager = mcp_manager or McpClientManager()
+        self._started = False
         
         # Initialize the official unified Google GenAI Client
-        self.client = genai.Client(api_key=api_key or os.environ.get("GEMINI_API_KEY"))
+        self.client = genai.Client(api_key=_get_gemini_api_key(api_key))
         
         # Simple chat memory tracking to maintain conversation structure
         self.conversations: dict[str, list[types.Content]] = {}
 
+    async def start(self):
+        if self._started:
+            return
+
+        await self.mcp_manager.__aenter__()
+        server_id = os.getenv("MCP_SERVER_ID", "local")
+        sse_url = os.getenv("MCP_SERVER_SSE_URL")
+        command = os.getenv("MCP_SERVER_COMMAND")
+        args = os.getenv("MCP_SERVER_ARGS")
+
+        if sse_url:
+            await self.mcp_manager.register_sse_server(server_id, sse_url)
+        elif command:
+            await self.mcp_manager.register_stdio_server(
+                server_id,
+                command,
+                shlex.split(args or ""),
+                env=os.environ.copy(),
+            )
+
+        self._started = True
+
+    async def stop(self):
+        if self._started:
+            await self.mcp_manager.__aexit__(None, None, None)
+            self._started = False
+
+    async def run(self, message: str, conversation_id: str = "default") -> str:
+        return await self.run_conversation_turn(conversation_id, message)
+
+    async def list_tools(self) -> list[dict]:
+        tools = []
+        for server_id, registry in self.mcp_manager.tool_registry.items():
+            for tool in registry:
+                tools.append({
+                    "server_id": server_id,
+                    "name": f"{server_id}__{tool.name}",
+                    "description": getattr(tool, "description", "") or "",
+                    "inputSchema": getattr(tool, "inputSchema", None),
+                })
+        return tools
     def _format_mcp_to_gemini_tool(self, server_id: str, mcp_tool) -> types.FunctionDeclaration:
         """
         Converts an MCP JSON schema into Gemini's FunctionDeclaration format.
@@ -59,7 +117,7 @@ class GuardedAgent:
         while True:
             # 3. Request generation from the model
             response = self.client.models.generate_content(
-                model='gemini-2.5-flash', # Fast, low-latency model optimized for tool orchestration
+                model='gemini-2.5-flash-lite', # Fast, low-latency model optimized for tool orchestration
                 contents=history,
                 config=types.GenerateContentConfig(
                     tools=agent_tools,

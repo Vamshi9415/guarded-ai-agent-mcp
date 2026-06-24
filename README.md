@@ -13,13 +13,13 @@ A modular, MongoDB-backed AI agent system with real-time policy enforcement and 
 ## Architecture
 
 ```
-MCP Server (stdio) → Transport Layer → Policy Engine (MongoDB) → Agent → FastAPI/Dashboard
+MCP Server (stdio) -> Transport Layer -> Policy Engine (MongoDB) -> Agent -> FastAPI/Dashboard
 ```
 
 ## Prerequisites
 
 - Python 3.8+
-- MongoDB (running locally or remote)
+- MongoDB Atlas access
 - MCP Server implementation
 
 ## Setup
@@ -48,9 +48,20 @@ cp .env.example .env
 Edit `.env` and update the values:
 
 ```bash
-# MongoDB Configuration
-MONGO_URI=mongodb://localhost:27017
-MONGO_DB_NAME=guarded_agent_db
+# MongoDB Configuration (Atlas)
+MONGO_TYPE=atlas
+MONGO_USER=vamshibachu23_db_user
+MONGO_PASS=replace-with-your-password
+MONGO_HOST_URI=clusterwms.v46ontq.mongodb.net
+MONGO_DB_NAME=wms_database
+MONGO_AUTH_SRC=wms_database
+MONGO_REWRITES=true
+MONGO_W=majority
+MONGO_HEARTBEAT_MS=60000
+MONGO_APP_NAME=Clusterwms
+
+# MongoDB Collections
+MONGO_COLL_CUSTOM_SEQUENCE=customSequence
 
 # FastAPI Configuration
 FASTAPI_HOST=0.0.0.0
@@ -61,17 +72,9 @@ MCP_SERVER_COMMAND=python
 MCP_SERVER_ARGS=path/to/your/mcp_server.py
 ```
 
-### 4. Start MongoDB
+### 4. Verify MongoDB Atlas Access
 
-Make sure MongoDB is running:
-
-```bash
-# On Linux/Mac
-mongod
-
-# On Windows
-net start MongoDB
-```
+Make sure your current IP address is allowed in MongoDB Atlas and that the configured database user has access to `wms_database`.
 
 ## Running the Application
 
@@ -119,15 +122,15 @@ http://localhost:8000
 
 ```
 guarded-ai-agent-mcp/
-├── backend/
-│   ├── db.py              # MongoDB connection
-│   ├── policy.py          # Policy engine logic
-│   └── main.py            # FastAPI entry point
-├── dashboard/
-│   └── index.html         # Admin UI
-├── .env.example           # Environment template
-├── requirements.txt       # Python dependencies
-└── README.md             # This file
+|-- backend/
+|   |-- db.py              # MongoDB connection
+|   |-- policy.py          # Policy engine logic
+|   `-- main.py            # FastAPI entry point
+|-- dashboard/
+|   `-- index.html         # Admin UI
+|-- .env.example           # Environment template
+|-- requirements.txt       # Python dependencies
+`-- README.md              # This file
 ```
 
 ## How It Works
