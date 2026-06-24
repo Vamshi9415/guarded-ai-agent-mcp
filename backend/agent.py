@@ -49,8 +49,7 @@ class GuardedAgent:
 
         if sse_url:
             await self.mcp_manager.register_sse_server(server_id, sse_url)
-        elif command:
-            await self.mcp_manager.register_stdio_server(
+        if command:            await self.mcp_manager.register_stdio_server(
                 server_id,
                 command,
                 shlex.split(args or ""),
@@ -154,11 +153,9 @@ class GuardedAgent:
                      )
                      continue
 
-                server_id, tool_name = qualified_name.split("__", 1)
-
+            # Keep qualified_name intact for policy check; split only when calling tool
                 # ─── THE SEAM: PROGRAMMATIC SECURITY EVALUATION ───
-                decision = await PolicyEngine.evaluate_tool(server_id, tool_name, tool_args)
-                
+            decision = await PolicyEngine.evaluate_tool(qualified_name, tool_args)                
                 # Permanently audit log the attempt and decision parameters to MongoDB Atlas
                 await log_tool_action(
                     conversation_id, 
@@ -197,8 +194,8 @@ class GuardedAgent:
                     # 3. Handle the outcome
                     if approved:
                         print("✅ Human approved! Executing tool...")
-                        mcp_output = await self.mcp_manager.call_tool_safe(qualified_name, tool_args)
-                        result_data = {"result": getattr(mcp_output, 'content', str(mcp_output))}
+                                        server_id, tool_name = qualified_name.split("__", 1)
+                mcp_output = await self.mcp_manager.call_tool_safe(server_id, tool_name, tool_args)                        result_data = {"result": getattr(mcp_output, 'content', str(mcp_output))}
                     else:
                         print("❌ Human denied or request timed out.")
                         result_data = {"error": "Security Exception: Action explicitly rejected by admin or timed out."}
