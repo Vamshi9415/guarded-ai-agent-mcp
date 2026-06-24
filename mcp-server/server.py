@@ -108,3 +108,7 @@ def search_files(pattern: str) -> str:
 
 if __name__ == "__main__":
     mcp.run(transport="stdio")
+
+
+if __name__ == "__main__":
+    mcp.run(transport="stdio")
