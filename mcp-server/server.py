@@ -100,7 +100,7 @@ def search_files(pattern: str) -> str:
         results = []
         for f in SANDBOX_DIR.rglob("**/*"):
             if f.is_file() and pattern.lower() in f.name.lower():
-                results.append(f.relative_to(SANDBOX_DIR))
+                results.append(str(f.relative_to(SANDBOX_DIR)))
         return "\n".join(results) if results else f"No files matched '{pattern}'"
     except Exception as e:
         return f"Error: {e}"
