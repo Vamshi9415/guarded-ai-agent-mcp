@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Guarded AI Agent – Admin Dashboard</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #333;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+      overflow: hidden;
+    }
+    header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 30px;
+      text-align: center;
+    }
+    h1 {
+      font-size: 2.5em;
+      margin-bottom: 10px;
+    }
+    h2 {
+      font-size: 1.8em;
+      margin-bottom: 20px;
+      color: #667eea;
+      border-bottom: 3px solid #667eea;
+      padding-bottom: 10px;
+    }
+    .section {
+      padding: 30px;
+      border-bottom: 1px solid #eee;
+    }
+    .section:last-child {
+      border-bottom: none;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #555;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 12px;
+      margin-bottom: 15px;
+      border: 2px solid #ddd;
+      border-radius: 6px;
+      font-size: 1em;
+      font-family: inherit;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      font-size: 1em;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+    button:active {
+      transform: translateY(0);
+    }
+    .btn-danger {
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    }
+    .btn-success {
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    }
+    .card {
+      background: #f9f9f9;
+      border: 2px solid #eee;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 15px;
+      transition: box-shadow 0.3s;
+    }
+    .card:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+    .card h3 {
+      font-size: 1.3em;
+      margin-bottom: 10px;
+      color: #667eea;
+    }
+    .card p {
+      margin: 5px 0;
+      color: #666;
+    }
+    .card button {
+      margin-right: 10px;
+      margin-top: 10px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+    }
+    .log-entry {
+      background: #f0f4ff;
+      border-left: 4px solid #667eea;
+      padding: 15px;
+      margin-bottom: 10px;
+      border-radius: 4px;
+      font-size: 0.95em;
+    }
+    .log-entry strong {
+      color: #667eea;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 0.85em;
+      font-weight: 600;
+      margin-left: 8px;
+    }
+    .badge-enabled {
+      background: #4facfe;
+      color: white;
+    }
+    .badge-disabled {
+      background: #ccc;
+      color: #555;
+    }
+    .badge-block {
+      background: #f5576c;
+      color: white;
+    }
+    .badge-approval {
+      background: #ffa502;
+      color: white;
+    }
+    .chat-box {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    .chat-messages {
+      background: #f9f9f9;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      padding: 20px;
+      height: 300px;
+      overflow-y: auto;
+      margin-bottom: 15px;
+    }
+    .chat-message {
+      padding: 10px 15px;
+      margin-bottom: 10px;
+      border-radius: 8px;
+      max-width: 80%;
+    }
+    .user-message {
+      background: #667eea;
+      color: white;
+      margin-left: auto;
+    }
+    .agent-message {
+      background: #e9ecef;
+      color: #333;
+    }
+    .spinner {
+      display: none;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #667eea;
+      border-radius: 50%;
+      width: 30px;
+      height: 30px;
+      animation: spin 1s linear infinite;
+      margin: 10px auto;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🛡️ Guarded AI Agent</h1>
+      <p>Admin Dashboard – Manage Rules, Approvals & Logs</p>
+    </header>
+
+    <!-- Chat Section -->
+    <div class="section">
+      <h2>💬 Chat with Agent</h2>
+      <div class="chat-box">
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="spinner" id="chatSpinner"></div>
+        <textarea id="userMessage" placeholder="Type your message..." rows="3"></textarea>
+        <button onclick="sendMessage()">Send Message</button>
+      </div>
+    </div>
+
+    <!-- Rules Section -->
+    <div class="section">
+      <h2>⚖️ Guardrail Rules</h2>
+      <div id="rulesContainer"></div>
+      <h3 style="margin-top:30px; color:#764ba2">Create New Rule</h3>
+      <label>Tool Name (or * for all):</label>
+      <select id="toolSelect">
+        <option value="*">* (All Tools)</option>
+      </select>
+      <label>Action:</label>
+      <select id="ruleAction">
+        <option value="block">Block</option>
+        <option value="require_approval">Require Approval</option>
+        <option value="input_validation">Input Validation</option>
+        <option value="token_budget">Token Budget</option>
+      </select>
+      <label>Reason:</label>
+      <input type="text" id="ruleReason" placeholder="e.g., Too risky" />
+      <label>Config (JSON):</label>
+      <textarea id="ruleConfig" placeholder='{"max_tokens": 1000}'>{}</textarea>
+      <button onclick="createRule()">Create Rule</button>
+    </div>
+
+    <!-- Approvals Section -->
+    <div class="section">
+      <h2>✅ Pending Approvals</h2>
+      <div id="approvalsContainer"></div>
+    </div>
+
+    <!-- Logs Section -->
+    <div class="section">
+      <h2>📋 Recent Logs</h2>
+      <button onclick="loadLogs()" style="margin-bottom:15px">Refresh Logs</button>
+      <div id="logsContainer"></div>
+    </div>
+  </div>
+
+  <script>
+    const API = '';  // Same origin, no prefix needed
+
+    // ─── Chat ────────────────────────────────────────────────────────────
+    async function sendMessage() {
+      const msg = document.getElementById('userMessage').value.trim();
+      if (!msg) return;
+
+      const chatBox = document.getElementById('chatMessages');
+      const spinner = document.getElementById('chatSpinner');
+
+      // Display user message
+      const userDiv = document.createElement('div');
+      userDiv.className = 'chat-message user-message';
+      userDiv.textContent = msg;
+      chatBox.appendChild(userDiv);
+      chatBox.scrollTop = chatBox.scrollHeight;
+
+      document.getElementById('userMessage').value = '';
+      spinner.style.display = 'block';
+
+      try {
+        const res = await fetch(`${API}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg }),
+        });
+        const data = await res.json();
+        spinner.style.display = 'none';
+
+        const agentDiv = document.createElement('div');
+        agentDiv.className = 'chat-message agent-message';
+        agentDiv.textContent = data.response || 'No response';
+        chatBox.appendChild(agentDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+      } catch (err) {
+        spinner.style.display = 'none';
+        alert('Chat error: ' + err.message);
+      }
+    }
+
+    // ─── Tools ───────────────────────────────────────────────────────────
+    async function loadTools() {
+      try {
+        const res = await fetch(`${API}/api/tools`);
+        const data = await res.json();
+        const sel = document.getElementById('toolSelect');
+        data.tools.forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t.name;
+          opt.textContent = t.name;
+          sel.appendChild(opt);
+        });
+      } catch (err) {
+        console.error('Failed to load tools:', err);
+      }
+    }
+
+    // ─── Rules ───────────────────────────────────────────────────────────
+    async function loadRules() {
+      try {
+        const res = await fetch(`${API}/api/rules`);
+        const data = await res.json();
+        const container = document.getElementById('rulesContainer');
+        container.innerHTML = '';
+        data.rules.forEach(r => {
+          const card = document.createElement('div');
+          card.className = 'card';
+          const enabled = r.enabled ? 'Enabled' : 'Disabled';
+          const badgeClass = r.enabled ? 'badge-enabled' : 'badge-disabled';
+          const actionBadge = r.action === 'block' ? 'badge-block' : 'badge-approval';
+          card.innerHTML = `
+            <h3>${r.tool_name} <span class="badge ${badgeClass}">${enabled}</span> <span class="badge ${actionBadge}">${r.action}</span></h3>
+            <p><strong>Reason:</strong> ${r.reason || 'N/A'}</p>
+            <p><strong>Config:</strong> ${JSON.stringify(r.config)}</p>
+            <button onclick="toggleRule('${r._id}')">Toggle</button>
+            <button class="btn-danger" onclick="deleteRule('${r._id}')">Delete</button>
+          `;
+          container.appendChild(card);
+        });
+      } catch (err) {
+        console.error('Failed to load rules:', err);
+      }
+    }
+
+    async function createRule() {
+      const tool = document.getElementById('toolSelect').value;
+      const action = document.getElementById('ruleAction').value;
+      const reason = document.getElementById('ruleReason').value;
+      let config = {};
+      try {
+        config = JSON.parse(document.getElementById('ruleConfig').value);
+      } catch {}
+      try {
+        await fetch(`${API}/api/rules`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tool_name: tool, action, reason, config }),
+        });
+        document.getElementById('ruleReason').value = '';
+        document.getElementById('ruleConfig').value = '{}';
+        loadRules();
+      } catch (err) {
+        alert('Failed to create rule: ' + err.message);
+      }
+    }
+
+    async function toggleRule(id) {
+      try {
+        await fetch(`${API}/api/rules/${id}/toggle`, { method: 'PATCH' });
+        loadRules();
+      } catch (err) {
+        alert('Failed to toggle rule: ' + err.message);
+      }
+    }
+
+    async function deleteRule(id) {
+      if (!confirm('Delete this rule?')) return;
+      try {
+        await fetch(`${API}/api/rules/${id}`, { method: 'DELETE' });
+        loadRules();
+      } catch (err) {
+        alert('Failed to delete rule: ' + err.message);
+      }
+    }
+
+    // ─── Approvals ───────────────────────────────────────────────────────
+    async function loadApprovals() {
+      try {
+        const res = await fetch(`${API}/api/approvals`);
+        const data = await res.json();
+        const container = document.getElementById('approvalsContainer');
+        container.innerHTML = '';
+        if (data.approvals.length === 0) {
+          container.innerHTML = '<p style="color:#999">No pending approvals</p>';
+          return;
+        }
+        data.approvals.forEach(a => {
+          const card = document.createElement('div');
+          card.className = 'card';
+          card.innerHTML = `
+            <h3>Tool: ${a.tool_name}</h3>
+            <p><strong>Arguments:</strong> ${JSON.stringify(a.arguments)}</p>
+            <p><strong>Status:</strong> ${a.status}</p>
+            <button class="btn-success" onclick="approveRequest('${a._id}')">Approve</button>
+            <button class="btn-danger" onclick="denyRequest('${a._id}')">Deny</button>
+          `;
+          container.appendChild(card);
+        });
+      } catch (err) {
+        console.error('Failed to load approvals:', err);
+      }
+    }
+
+    async function approveRequest(id) {
+      try {
+        await fetch(`${API}/api/approvals/${id}/approve`, { method: 'POST' });
+        loadApprovals();
+      } catch (err) {
+        alert('Failed to approve: ' + err.message);
+      }
+    }
+
+    async function denyRequest(id) {
+      try {
+        await fetch(`${API}/api/approvals/${id}/deny`, { method: 'POST' });
+        loadApprovals();
+      } catch (err) {
+        alert('Failed to deny: ' + err.message);
+      }
+    }
+
+    // ─── Logs ────────────────────────────────────────────────────────────
+    async function loadLogs() {
+      try {
+        const res = await fetch(`${API}/api/logs`);
+        const data = await res.json();
+        const container = document.getElementById('logsContainer');
+        container.innerHTML = '';
+        data.logs.forEach(log => {
+          const entry = document.createElement('div');
+          entry.className = 'log-entry';
+          entry.innerHTML = `
+            <strong>${log.tool_name}</strong> – 
+            <em>${log.action}</em> – 
+            ${log.allowed ? '✅ Allowed' : '❌ Blocked'} – 
+            ${new Date(log.timestamp).toLocaleString()}
+            <br/><small>${log.reason || ''}</small>
+          `;
+          container.appendChild(entry);
+        });
+      } catch (err) {
+        console.error('Failed to load logs:', err);
+      }
+    }
+
+    // ─── Init ────────────────────────────────────────────────────────────
+    window.onload = () => {
+      loadTools();
+      loadRules();
+      loadApprovals();
+      loadLogs();
+      setInterval(() => {
+        loadApprovals();
+        loadLogs();
+      }, 5000);  // Poll every 5 seconds
+    };
+  </script>
+</body>
+</html>
