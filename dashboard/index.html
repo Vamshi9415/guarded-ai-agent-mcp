@@ -398,7 +398,7 @@
           card.className = 'card';
           card.innerHTML = `
             <h3>Tool: ${a.tool_name}</h3>
-            <p><strong>Arguments:</strong> ${JSON.stringify(a.arguments)}</p>
+            <p><strong>Arguments:</strong> ${JSON.stringify(a.tool_args || a.arguments)}</p>
             <p><strong>Status:</strong> ${a.status}</p>
             <button class="btn-success" onclick="approveRequest('${a._id}')">Approve</button>
             <button class="btn-danger" onclick="denyRequest('${a._id}')">Deny</button>
@@ -440,8 +440,7 @@
           entry.className = 'log-entry';
           entry.innerHTML = `
             <strong>${log.tool_name}</strong> – 
-            <em>${log.action}</em> – 
-            ${log.allowed ? '✅ Allowed' : '❌ Blocked'} – 
+              <em>${log.decision || 'N/A'}</em> -            ${log.decision === 'ALLOW' || log.decision === 'APPROVED' ? '✅ Allowed' : '❌ Blocked'} -
             ${new Date(log.timestamp).toLocaleString()}
             <br/><small>${log.reason || ''}</small>
           `;
