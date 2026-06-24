@@ -159,6 +159,21 @@ def resolve_approval(approval_id: str, status: str) -> bool:
     return result.modified_count > 0
 
 
+
+def create_approval_request(data: dict) -> str:
+    """Create a new approval request and return its ID."""
+    from bson import ObjectId
+    approval_doc = {
+        "conversation_id": data.get("conversation_id", "default"),
+        "tool_name": data["tool_name"],
+        "tool_args": data["tool_args"],
+        "reason": data.get("reason", "Requires approval"),
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc),
+    }
+    result = get_approvals_collection().insert_one(approval_doc)
+    return str(result.inserted_id)
+
 def get_pending_approvals() -> list:
     """Return all pending approval requests."""
     items = []
