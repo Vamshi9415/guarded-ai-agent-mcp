@@ -24,15 +24,17 @@ def get_mongo_uri() -> str:
         auth_source = os.environ.get("MONGO_AUTH_SRC", get_mongo_db_name())
         write_concern = os.environ.get("MONGO_W", "majority")
         app_name = os.environ.get("MONGO_APP_NAME", "Clusterwms")
-
+        # connectTimeoutMS and socketTimeoutMS added to avoid hanging on
+        # DNS / network failures when connecting to Atlas.
         return (
             f"mongodb+srv://{user}:{password}@{host}/"
             f"?authSource={quote_plus(auth_source)}"
             f"&retryWrites=true"
             f"&w={quote_plus(write_concern)}"
             f"&appName={quote_plus(app_name)}"
+            f"&connectTimeoutMS=5000"
+            f"&socketTimeoutMS=10000"
         )
-
     return os.environ.get("MONGO_LOCAL_URI", "mongodb://localhost:27017")
 
 
