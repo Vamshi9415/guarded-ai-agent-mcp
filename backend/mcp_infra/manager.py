@@ -3,6 +3,7 @@ from contextlib import AsyncExitStack
 from mcp import ClientSession
 from mcp.client.stdio import stdio_client, StdioServerParameters
 from mcp.client.sse import sse_client
+from mcp.client.streamable_http import streamablehttp_client
 
 class McpClientManager:
     def __init__(self):
@@ -38,9 +39,9 @@ class McpClientManager:
             tools_response = await session.list_tools()
             self.tool_registry[server_id] = tools_response.tools
             
-            print(f"🚀 Successfully connected and registered stdio server: {server_id}")
+            print(f"Successfully connected and registered stdio server: {server_id}")
         except Exception as e:
-            print(f"❌ Failed to hook up stdio server {server_id}: {e}")
+            print(f"Failed to hook up stdio server {server_id}: {e}")
 
     async def register_sse_server(self, server_id: str, url: str):
         """Establishes a persistent streaming connection to a remote HTTP/SSE MCP server."""
@@ -54,9 +55,27 @@ class McpClientManager:
             
             tools_response = await session.list_tools()
             self.tool_registry[server_id] = tools_response.tools
-            print(f"🌐 Successfully connected and registered SSE server: {server_id}")
+            print(f"Successfully connected and registered SSE server: {server_id}")
         except Exception as e:
-            print(f"❌ Failed to hook up SSE server {server_id}: {e}")
+            print(f"Failed to hook up SSE server {server_id}: {e}")
+
+
+    async def register_http_server(self, server_id: str, url: str):
+        """Establishes a persistent streamable HTTP connection to a remote MCP server."""
+        try:
+            read, write, _ = await self._exit_stack.enter_async_context(
+                streamablehttp_client(url)
+            )
+            session = await self._exit_stack.enter_async_context(ClientSession(read, write))
+
+            await session.initialize()
+            self.sessions[server_id] = session
+
+            tools_response = await session.list_tools()
+            self.tool_registry[server_id] = tools_response.tools
+            print(f"Successfully connected and registered HTTP server: {server_id}")
+        except Exception as e:
+            print(f"Failed to hook up HTTP server {server_id}: {e}")
 
     async def call_tool_safe(self, qualified_name: str, args: dict):
         """Routes the structured request to the correct active sub-server."""

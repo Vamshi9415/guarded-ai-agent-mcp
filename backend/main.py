@@ -31,7 +31,7 @@ if __package__ in (None, ""):
 from backend.agent import GuardedAgent
 from backend.db import (
     create_rule, get_all_rules, toggle_rule, delete_rule,
-    get_pending_approvals, resolve_approval, get_recent_logs,
+    get_pending_approvals, resolve_approval, get_recent_logs, MongoUnavailable,
 )
 
 # ---------------------------------------------------------------------------
@@ -79,6 +79,19 @@ class RuleCreate(BaseModel):
     config: Dict[str, Any] = {}
 
 
+def _mongo_read_fallback(key: str, exc: MongoUnavailable):
+    return JSONResponse(
+        status_code=200,
+        content={
+            key: [],
+            "storage": {"status": "unavailable", "detail": str(exc)},
+        },
+    )
+
+
+def _mongo_write_unavailable(exc: MongoUnavailable):
+    raise HTTPException(503, f"MongoDB unavailable: {exc}")
+
 # ---------------------------------------------------------------------------
 # /chat
 # ---------------------------------------------------------------------------
@@ -112,25 +125,39 @@ async def list_tools():
 
 @app.get("/api/rules")
 def list_rules():
-    return {"rules": get_all_rules()}
+    try:
+        return {"rules": get_all_rules()}
+    except MongoUnavailable as exc:
+        return _mongo_read_fallback("rules", exc)
 
 
 @app.post("/api/rules", status_code=201)
 def add_rule(body: RuleCreate):
-    rule_id = create_rule(body.model_dump())
+    try:
+        rule_id = create_rule(body.model_dump())
+    except MongoUnavailable as exc:
+        _mongo_write_unavailable(exc)
     return {"id": rule_id}
 
 
 @app.patch("/api/rules/{rule_id}/toggle")
 def toggle(rule_id: str):
-    if not toggle_rule(rule_id):
+    try:
+        changed = toggle_rule(rule_id)
+    except MongoUnavailable as exc:
+        _mongo_write_unavailable(exc)
+    if not changed:
         raise HTTPException(404, "Rule not found")
     return {"status": "toggled"}
 
 
 @app.delete("/api/rules/{rule_id}")
 def remove_rule(rule_id: str):
-    if not delete_rule(rule_id):
+    try:
+        deleted = delete_rule(rule_id)
+    except MongoUnavailable as exc:
+        _mongo_write_unavailable(exc)
+    if not deleted:
         raise HTTPException(404, "Rule not found")
     return {"status": "deleted"}
 
@@ -141,19 +168,30 @@ def remove_rule(rule_id: str):
 
 @app.get("/api/approvals")
 def list_approvals():
-    return {"approvals": get_pending_approvals()}
+    try:
+        return {"approvals": get_pending_approvals()}
+    except MongoUnavailable as exc:
+        return _mongo_read_fallback("approvals", exc)
 
 
 @app.post("/api/approvals/{approval_id}/approve")
 def approve(approval_id: str):
-    if not resolve_approval(approval_id, "approved"):
+    try:
+        resolved = resolve_approval(approval_id, "approved")
+    except MongoUnavailable as exc:
+        _mongo_write_unavailable(exc)
+    if not resolved:
         raise HTTPException(404, "Approval not found or already resolved")
     return {"status": "approved"}
 
 
 @app.post("/api/approvals/{approval_id}/deny")
 def deny(approval_id: str):
-    if not resolve_approval(approval_id, "denied"):
+    try:
+        resolved = resolve_approval(approval_id, "denied")
+    except MongoUnavailable as exc:
+        _mongo_write_unavailable(exc)
+    if not resolved:
         raise HTTPException(404, "Approval not found or already resolved")
     return {"status": "denied"}
 
@@ -164,7 +202,10 @@ def deny(approval_id: str):
 
 @app.get("/api/logs")
 def logs(limit: int = 50):
-    return {"logs": get_recent_logs(limit)}
+    try:
+        return {"logs": get_recent_logs(limit)}
+    except MongoUnavailable as exc:
+        return _mongo_read_fallback("logs", exc)
 
 
 # ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 """
 PolicyEngine --- The Guardrails Brain
 Three actions: BLOCK / ALLOW / REQUIRE_APPROVAL
-Rule types: block_tool, require_approval, input_validation, token_budget
+Rule types: BLOCK, REQUIRE_APPROVAL, INPUT_VALIDATION, TOKEN_BUDGET
 Rules stored in MongoDB --- changes propagate without restart
 """
 
@@ -9,7 +9,7 @@ import os
 import re
 from typing import Any, Dict
 
-from .db import get_logs_collection, get_rules_collection
+from .db import MongoUnavailable, get_logs_collection, get_rules_collection
 
 
 _indexes_ready = False
@@ -26,59 +26,61 @@ def _rules_col():
 
 class PolicyEngine:
     """
-    evaluates tool calls against guardrail rules stored in MongoDB.
-    Three possible decisions: BLOCK / ALLOW / REQUIRE_APPROVAL
+    Evaluates tool calls against guardrail rules stored in MongoDB.
+    Conflict policy: BLOCK beats INPUT_VALIDATION failure, which beats REQUIRE_APPROVAL,
+    which beats TOKEN_BUDGET, otherwise ALLOW.
     """
 
     @classmethod
     async def evaluate_tool(
-        cls, qualified_tool_name: str, tool_args: Dict[str, Any]    ) -> Dict[str, Any]:
-        rules_col = _rules_col()
+        cls, server_id: str, tool_name: str, tool_args: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        try:
+            rules_col = _rules_col()
+        except MongoUnavailable as exc:
+            return {"action": "ALLOW", "reason": f"Policy store unavailable: {exc}"}
 
-        # 1. Check BLOCK rules (highest priority --- deny immediately)
-        block_rule = rules_col.find_one({
-            "tool_name": tool_name,
-            "action": "BLOCK",
-            "enabled": True,
-        })
+        qualified_name = f"{server_id}__{tool_name}"
+
+        block_rule = cls._find_rule(rules_col, "BLOCK", tool_name, qualified_name)
         if block_rule:
             return {"action": "BLOCK", "reason": block_rule.get("reason", "Blocked by policy")}
 
-        # 2. Check INPUT_VALIDATION rules
-        validation_rule = rules_col.find_one({
-            "enabled": True,
-            "action": "INPUT_VALIDATION",
-        })
+        validation_rule = rules_col.find_one({"enabled": True, "action": "INPUT_VALIDATION"})
         if validation_rule:
             condition = validation_rule.get("condition") or validation_rule.get("config", {})
             validated = cls._validate_inputs(tool_args, condition)
             if not validated["valid"]:
                 return {"action": "BLOCK", "reason": f"Input validation failed: {validated['message']}"}
 
-        # 3. Check REQUIRE_APPROVAL rules
-        approval_rule = rules_col.find_one({
-            "tool_name": tool_name,
-            "action": "REQUIRE_APPROVAL",
-            "enabled": True,
-        })
+        approval_rule = cls._find_rule(rules_col, "REQUIRE_APPROVAL", tool_name, qualified_name)
         if approval_rule:
-            return {"action": "REQUIRE_APPROVAL", "reason": approval_rule.get("reason", "Requires human approval")}
+            return {
+                "action": "REQUIRE_APPROVAL",
+                "reason": approval_rule.get("reason", "Requires human approval"),
+            }
 
-        # 4. Check TOKEN_BUDGET rule (per conversation)
-        budget_rule = rules_col.find_one({
-            "action": "TOKEN_BUDGET",
-            "enabled": True,
-        })
+        budget_rule = rules_col.find_one({"action": "TOKEN_BUDGET", "enabled": True})
         if budget_rule:
             conversation_id = os.environ.get("CONVERSATION_ID", "default")
             config = budget_rule.get("config", {})
             max_tokens = config.get("max_tokens", budget_rule.get("max_tokens", 10000))
-            total_tokens = get_logs_collection().count_documents({"conversation_id": conversation_id})
+            try:
+                total_tokens = get_logs_collection().count_documents({"conversation_id": conversation_id})
+            except MongoUnavailable as exc:
+                return {"action": "ALLOW", "reason": f"Token budget store unavailable: {exc}"}
             if total_tokens >= max_tokens:
                 return {"action": "BLOCK", "reason": f"Token budget exceeded ({total_tokens} >= {max_tokens})"}
 
-        # 5. No matching rules --- ALLOW by default
         return {"action": "ALLOW", "reason": "No restrictive rule matched"}
+
+    @classmethod
+    def _find_rule(cls, rules_col, action: str, tool_name: str, qualified_name: str):
+        return rules_col.find_one({
+            "tool_name": {"$in": [tool_name, qualified_name, "*"]},
+            "action": action,
+            "enabled": True,
+        })
 
     @classmethod
     def _validate_inputs(cls, args: Dict, condition: Dict) -> Dict:
@@ -101,8 +103,7 @@ class PolicyEngine:
             return {"valid": False, "message": f"Field '{field}' must contain '{value}'"}
         if operator == "not_equals" and str(arg_value) == str(value):
             return {"valid": False, "message": f"Field '{field}' must not equal '{value}'"}
-        if operator == "regex":
-            if not re.match(value, str(arg_value)):
-                return {"valid": False, "message": f"Field '{field}' must match pattern '{value}'"}
+        if operator == "regex" and not re.match(value, str(arg_value)):
+            return {"valid": False, "message": f"Field '{field}' must match pattern '{value}'"}
 
         return {"valid": True, "message": "Validation passed"}

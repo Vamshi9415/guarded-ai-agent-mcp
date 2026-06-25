@@ -13,14 +13,14 @@ A modular, MongoDB-backed AI agent system with real-time policy enforcement and 
 ## Architecture
 
 ```
-MCP Server (stdio) -> Transport Layer -> Policy Engine (MongoDB) -> Agent -> FastAPI/Dashboard
+MCP Servers (stdio/http/sse) -> Transport Layer -> Policy Engine (MongoDB) -> Agent -> FastAPI/Dashboard
 ```
 
 ## Prerequisites
 
 - Python 3.8+
 - MongoDB Atlas access
-- MCP Server implementation
+- MCP Server implementation, plus optional access to a remote MCP server such as Context7
 
 ## Setup
 
@@ -68,8 +68,13 @@ FASTAPI_HOST=0.0.0.0
 FASTAPI_PORT=8000
 
 # MCP Server Configuration
+MCP_SERVER_ID=local-file-mcp
 MCP_SERVER_COMMAND=python
-MCP_SERVER_ARGS=path/to/your/mcp_server.py
+MCP_SERVER_ARGS=mcp-server/server.py
+
+MCP_REMOTE_SERVER_ID=remote-context7
+MCP_REMOTE_SERVER_TRANSPORT=http
+MCP_REMOTE_SERVER_URL=https://mcp.context7.com/mcp
 ```
 
 ### 4. Verify MongoDB Atlas Access
@@ -135,7 +140,7 @@ guarded-ai-agent-mcp/
 
 ## How It Works
 
-1. **Agent Startup**: Connects to MCP server and discovers available tools
+1. **Agent Startup**: Connects to each configured MCP server and discovers available tools
 2. **Policy Polling**: Checks MongoDB every 2 seconds for policy updates
 3. **Rule Enforcement**: Before executing any tool, checks active rules
 4. **Conflict Resolution**: If multiple rules match, the most restrictive wins
@@ -157,6 +162,30 @@ guarded-ai-agent-mcp/
 uvicorn backend.main:app --reload
 ```
 
+
+### Running Tests
+
+The default test suite is offline and does not call Gemini, MongoDB Atlas, or live MCP servers. It uses fakes for the LLM, Mongo collections, and MCP sessions so policy and agent behavior can be checked quickly and repeatably.
+
+```bash
+python -m pytest -p no:cacheprovider
+```
+
+Current coverage includes:
+
+- Policy decisions: allow, block, wildcard block, human approval, input validation, token budget, and conflict priority
+- Agent tool-use loop: live MCP tool discovery, allowed execution, blocked execution, approval timeout/approval success, malformed tool names
+- FastAPI routes: chat, tools, rules, approvals, logs, and dashboard serving
+- MongoDB helper functions: rule create/list/toggle/delete and audit log serialization
+- MCP transport manager: malformed tool names, missing sessions, successful routing, and crashed-server errors
+- Custom MCP file server: sandbox path safety and read/write/list/search/delete behavior
+- Config/import smoke tests: Mongo URI building and backend imports without network startup
+
+The real MongoDB connectivity check is opt-in because it needs credentials, DNS, and Atlas network access:
+
+```bash
+RUN_MONGO_INTEGRATION=1 python -m pytest tests/testmongo.py -m integration
+```
 ### Testing Policy Updates
 
 1. Create a rule via dashboard
@@ -166,3 +195,4 @@ uvicorn backend.main:app --reload
 ## License
 
 MIT
+

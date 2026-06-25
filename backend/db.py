@@ -9,8 +9,8 @@ Collections:
 
 import os
 from datetime import datetime, timezone
+from time import monotonic
 from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure
 from typing import Any, Dict, Optional
 
 from .mongo_config import get_mongo_db_name, get_mongo_heartbeat_ms, get_mongo_uri
@@ -21,26 +21,41 @@ MONGODB_URI = get_mongo_uri()
 MONGODB_DB_NAME = get_mongo_db_name()
 
 _mongo_client: Optional[MongoClient] = None
+_mongo_error: Optional[str] = None
+_mongo_error_at: Optional[float] = None
+
+
+class MongoUnavailable(RuntimeError):
+    """Raised when MongoDB cannot be reached or initialized."""
 
 
 def get_db():
     """Lazy singleton --- reuse the same MongoClient across the app lifetime."""
-    global _mongo_client
+    global _mongo_client, _mongo_error, _mongo_error_at
     if _mongo_client is None:
-        _mongo_client = MongoClient(
-            MONGODB_URI,
-            serverSelectionTimeoutMS=5000,
-            connectTimeoutMS=5000,
-            heartbeatFrequencyMS=get_mongo_heartbeat_ms(),
-        )
-        # Quick ping to verify connection works on first use
+        retry_after = int(os.environ.get("MONGO_RETRY_COOLDOWN_SECONDS", "30"))
+        if _mongo_error and _mongo_error_at and monotonic() - _mongo_error_at < retry_after:
+            raise MongoUnavailable(_mongo_error)
         try:
-            _mongo_client.admin.command("ping")
+            client = MongoClient(
+                MONGODB_URI,
+                serverSelectionTimeoutMS=5000,
+                connectTimeoutMS=5000,
+                heartbeatFrequencyMS=get_mongo_heartbeat_ms(),
+            )
+            client.admin.command("ping")
+            _mongo_client = client
+            _mongo_error = None
+            _mongo_error_at = None
             print("MongoDB connected successfully")
-        except ConnectionFailure as e:
-            print(f"MongoDB connection failed: {e}")
-    return _mongo_client[MONGODB_DB_NAME]
+        except Exception as e:
+            _mongo_client = None
+            _mongo_error = str(e)
+            _mongo_error_at = monotonic()
+            print(f"MongoDB unavailable: {_mongo_error}")
+            raise MongoUnavailable(_mongo_error) from e
 
+    return _mongo_client[MONGODB_DB_NAME]
 
 # --- Collections convenience ------------------------------------------
 def get_rules_collection():
@@ -77,7 +92,10 @@ async def log_tool_action(
         "reason": reason,
         "timestamp": datetime.now(timezone.utc),
     }
-    result = get_logs_collection().insert_one(doc)
+    try:
+        result = get_logs_collection().insert_one(doc)
+    except MongoUnavailable:
+        return ""
     return str(result.inserted_id)
 
 
@@ -145,7 +163,10 @@ def create_approval_request(
         "status": "pending",           # pending / approved / denied / timeout
         "created_at": datetime.now(timezone.utc),
     }
-    result = get_approvals_collection().insert_one(doc)
+    try:
+        result = get_approvals_collection().insert_one(doc)
+    except MongoUnavailable:
+        return ""
     return str(result.inserted_id)
 
 
@@ -159,12 +180,11 @@ def resolve_approval(approval_id: str, status: str) -> bool:
     return result.modified_count > 0
 
 
-
-def create_approval_request(data: dict) -> str:
-    """Create a new approval request and return its ID."""
-    from bson import ObjectId
+def create_approval_request_from_data(data: dict) -> str:
+    """Create a pending approval request from an API-style payload."""
     approval_doc = {
         "conversation_id": data.get("conversation_id", "default"),
+        "server_id": data.get("server_id", ""),
         "tool_name": data["tool_name"],
         "tool_args": data["tool_args"],
         "reason": data.get("reason", "Requires approval"),
@@ -173,6 +193,7 @@ def create_approval_request(data: dict) -> str:
     }
     result = get_approvals_collection().insert_one(approval_doc)
     return str(result.inserted_id)
+
 
 def get_pending_approvals() -> list:
     """Return all pending approval requests."""

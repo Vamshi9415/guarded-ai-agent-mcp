@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from mcp import ClientSession
 from mcp.client.stdio import stdio_client, StdioServerParameters
 from mcp.client.sse import sse_client
+from mcp.client.streamable_http import streamablehttp_client
 
 
 async def main():
@@ -47,14 +48,18 @@ async def main():
                     )
 
                 elif config["type"] == "sse":
-                    read, write, _ = await stack.enter_async_context(   # 3-tuple
+                    read, write, _ = await stack.enter_async_context(
                         sse_client(config["url"])
+                    )
+
+                elif config["type"] == "http":
+                    read, write, _ = await stack.enter_async_context(
+                        streamablehttp_client(config["url"])
                     )
 
                 else:
                     print(f"Unknown transport type for {server_id}")
                     continue
-
                 session = await stack.enter_async_context(
                     ClientSession(read, write)
                 )
