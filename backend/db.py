@@ -2,11 +2,10 @@
 db.py --- MongoDB Atlas connection + audit logging
 All tool calls (allowed, blocked, pending) are logged here.
 Collections:
-  wms_database.tool_logs      --- audit trail of every tool call
+  wms_database.tool_logs       --- audit trail of every tool call
   wms_database.guardrail_rules --- policy rules (read by PolicyEngine)
   wms_database.approvals       --- pending approval requests
 """
-
 import os
 from datetime import datetime, timezone
 from time import monotonic
@@ -15,6 +14,20 @@ from typing import Any, Dict, Optional
 
 from .mongo_config import get_mongo_db_name, get_mongo_heartbeat_ms, get_mongo_uri
 
+# ---------------------------------------------------------------------------
+# Fix: Override dnspython's DNS resolver to use public DNS servers.
+# This resolves "DNS operation timed out" errors when local DNS servers
+# (e.g. 10.1.2.x) cannot resolve MongoDB Atlas SRV records.
+# ---------------------------------------------------------------------------
+try:
+    import dns.resolver
+    _public_resolver = dns.resolver.Resolver(configure=False)
+    _public_resolver.nameservers = ['8.8.8.8', '8.8.4.4', '1.1.1.1']
+    _public_resolver.timeout = 5
+    _public_resolver.lifetime = 10
+    dns.resolver.default_resolver = _public_resolver
+except Exception:
+    pass  # dnspython not installed or not needed (local MongoDB)
 
 # --- Connection -------------------------------------------------------
 MONGODB_URI = get_mongo_uri()
@@ -41,6 +54,7 @@ def get_db():
                 MONGODB_URI,
                 serverSelectionTimeoutMS=5000,
                 connectTimeoutMS=5000,
+                socketTimeoutMS=10000,
                 heartbeatFrequencyMS=get_mongo_heartbeat_ms(),
             )
             client.admin.command("ping")
@@ -54,8 +68,8 @@ def get_db():
             _mongo_error_at = monotonic()
             print(f"MongoDB unavailable: {_mongo_error}")
             raise MongoUnavailable(_mongo_error) from e
-
     return _mongo_client[MONGODB_DB_NAME]
+
 
 # --- Collections convenience ------------------------------------------
 def get_rules_collection():
@@ -88,7 +102,7 @@ async def log_tool_action(
         "server_id": server_id,
         "tool_name": tool_name,
         "tool_args": tool_args,
-        "decision": decision,          # ALLOW / BLOCK / REQUIRE_APPROVAL
+        "decision": decision,  # ALLOW / BLOCK / REQUIRE_APPROVAL
         "reason": reason,
         "timestamp": datetime.now(timezone.utc),
     }
@@ -132,7 +146,6 @@ def toggle_rule(rule_id: str, enabled: bool | None = None) -> bool:
         if not existing:
             return False
         enabled = not existing.get("enabled", True)
-
     result = get_rules_collection().update_one(
         {"_id": object_id},
         {"$set": {"enabled": enabled, "updated_at": datetime.now(timezone.utc)}},
@@ -160,7 +173,7 @@ def create_approval_request(
         "server_id": server_id,
         "tool_name": tool_name,
         "tool_args": tool_args,
-        "status": "pending",           # pending / approved / denied / timeout
+        "status": "pending",  # pending / approved / denied / timeout
         "created_at": datetime.now(timezone.utc),
     }
     try:
@@ -191,7 +204,10 @@ def create_approval_request_from_data(data: dict) -> str:
         "status": "pending",
         "created_at": datetime.now(timezone.utc),
     }
-    result = get_approvals_collection().insert_one(approval_doc)
+    try:
+        result = get_approvals_collection().insert_one(approval_doc)
+    except MongoUnavailable:
+        return ""
     return str(result.inserted_id)
 
 
@@ -200,6 +216,8 @@ def get_pending_approvals() -> list:
     items = []
     for a in get_approvals_collection().find({"status": "pending"}):
         a["_id"] = str(a["_id"])
+        if "created_at" in a:
+            a["created_at"] = a["created_at"].isoformat()
         items.append(a)
     return items
 
