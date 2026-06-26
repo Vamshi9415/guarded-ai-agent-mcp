@@ -17,7 +17,10 @@ class StdioTransport(MCPTransport):
         self.args = args 
         self.stack = AsyncExitStack()
     
-    async def connect(self):
+    async def connect(self, stack: AsyncExitStack | None = None):
+        if stack is not None:
+            self.stack = stack
+
         params = StdioServerParameters(
             command = self.command,
             args = self.args 
@@ -36,4 +39,7 @@ class StdioTransport(MCPTransport):
         return self.session 
     
     async def disconnect(self):
-        return self.stack.aclose()
+        if self.stack is not None:
+            await self.stack.aclose()
+            self.stack = None
+        self.session = None

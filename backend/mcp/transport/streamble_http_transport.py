@@ -21,7 +21,9 @@ class StreamableHTTPTransport(MCPTransport):
 
         self.stack = AsyncExitStack()
 
-    async def connect(self):
+    async def connect(self, stack: AsyncExitStack | None = None):
+        if stack is not None:
+            self.stack = stack
 
         read_stream, write_stream, _ = (
             await self.stack.enter_async_context(
@@ -44,4 +46,6 @@ class StreamableHTTPTransport(MCPTransport):
         return self.session
 
     async def disconnect(self):
-        await self.stack.aclose()
+        if self.stack is not None:
+            await self.stack.aclose()
+            self.stack = None
