@@ -1,3 +1,15 @@
 .env
 snapshot.py
 project_snapshot.md
+
+# Python bytecode cache
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Development environments
+.env
+.venv/
+env/
+venv/

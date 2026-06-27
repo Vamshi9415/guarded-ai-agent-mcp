@@ -110,7 +110,7 @@ class ToolLoop:
     async def run(self, messages: list[Message], conversation_id: str) -> ToolLoopResult:
 
         messages = list(messages)  # never mutate the caller's list
-        total_usage = Usage()
+        # total_usage = Usage()
 
         for turn in range(self.max_tool_turns):
 
@@ -122,7 +122,7 @@ class ToolLoop:
                 print(f"Parameters: {tool.parameters}")
             print("=====================================\n")
             response = await self.llm.generate(messages, tools)
-            total_usage = total_usage + response.usage
+            # total_usage = total_usage + response.usage
 
             if not response.wants_tool_call:
                 messages.append(Message.assistant(text=response.content, raw=response.raw))
@@ -134,7 +134,7 @@ class ToolLoop:
                 )
 
             budget = await self.policy.check_budget(
-                conversation_id=conversation_id, usage=total_usage
+                conversation_id=conversation_id, usage=response.usage
             )
             if not budget.allowed:
                 messages.append(
