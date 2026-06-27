@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 
 from backend.api.dependencies import get_approval_manager, get_policy_store
 from backend.api.schemas import (
@@ -14,12 +14,7 @@ from backend.api.schemas import (
 from backend.policy.approvals import ApprovalManager
 from backend.policy.store import PolicyStore
 
-router = APIRouter(prefix="/approvals", tags=["approvals"])
-
-
-def _not_found(detail: str) -> HTTPException:
-    """Builds a 404 HTTP exception."""
-    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+router = APIRouter(prefix="/approvals", tags=["Approvals"])
 
 
 @router.get("/pending", response_model=list[ApprovalResponse])
@@ -38,15 +33,11 @@ async def approve_request(
     approvals: ApprovalManager = Depends(get_approval_manager),
 ) -> ApprovalResponse:
     """Approves a pending approval request."""
-    try:
-        resolved = await approvals.approve(
-            approval_id=approval_id,
-            approver=payload.approver,
-            reason=payload.reason,
-        )
-    except KeyError as exc:
-        raise _not_found(str(exc)) from exc
-
+    resolved = await approvals.approve(
+        approval_id=approval_id,
+        resolved_by=payload.resolved_by,   # matched to ApprovalManager.approve() kwarg
+        reason=payload.reason,
+    )
     return to_approval_response(resolved)
 
 
@@ -57,13 +48,9 @@ async def reject_request(
     approvals: ApprovalManager = Depends(get_approval_manager),
 ) -> ApprovalResponse:
     """Rejects a pending approval request."""
-    try:
-        resolved = await approvals.reject(
-            approval_id=approval_id,
-            approver=payload.approver,
-            reason=payload.reason,
-        )
-    except KeyError as exc:
-        raise _not_found(str(exc)) from exc
-
+    resolved = await approvals.reject(
+        approval_id=approval_id,
+        resolved_by=payload.resolved_by,   # matched to ApprovalManager.reject() kwarg
+        reason=payload.reason,
+    )
     return to_approval_response(resolved)

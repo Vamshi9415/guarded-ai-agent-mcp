@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+import uuid
+
+from fastapi import APIRouter, Depends, Response, status
 
 from backend.api.dependencies import get_policy_store
 from backend.api.schemas import (
@@ -16,23 +18,24 @@ from backend.api.schemas import (
 from backend.policy.models import PolicyRule
 from backend.policy.store import PolicyStore
 
-router = APIRouter(prefix="/rules", tags=["rules"])
+router = APIRouter(prefix="/rules", tags=["Rules"])
 
 
-def _not_found(detail: str) -> HTTPException:
-    """Builds a 404 HTTP exception."""
-    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+def _new_rule_id() -> str:
+    """Generates a fresh UUID string for a new PolicyRule.
 
-
-def _bad_request(detail: str) -> HTTPException:
-    """Builds a 400 HTTP exception."""
-    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+    Previously the code used `PolicyRule.__dataclass_fields__["id"].default_factory()`
+    which is a fragile internal-dataclass hack. This function is the clean
+    replacement: it generates the same kind of ID (UUID4 str) without coupling
+    to dataclass internals or requiring a classmethod on PolicyRule itself.
+    """
+    return str(uuid.uuid4())
 
 
 def _build_policy_rule(payload: RuleCreate | RuleUpdate, rule_id: str | None = None) -> PolicyRule:
     """Converts an API payload into a policy-layer PolicyRule."""
     return PolicyRule(
-        id=rule_id if rule_id is not None else PolicyRule.__dataclass_fields__["id"].default_factory(),
+        id=rule_id if rule_id is not None else _new_rule_id(),
         name=payload.name,
         action=payload.action,
         tool_pattern=payload.tool_pattern,
@@ -61,12 +64,8 @@ async def create_rule(
     store: PolicyStore = Depends(get_policy_store),
 ) -> RuleResponse:
     """Creates a new policy rule."""
-    try:
-        rule = _build_policy_rule(payload)
-        created = await store.create_rule(rule)
-    except ValueError as exc:
-        raise _bad_request(str(exc)) from exc
-
+    rule = _build_policy_rule(payload)
+    created = await store.create_rule(rule)
     return to_rule_response(created)
 
 
@@ -76,11 +75,7 @@ async def get_rule(
     store: PolicyStore = Depends(get_policy_store),
 ) -> RuleResponse:
     """Returns one policy rule by id."""
-    try:
-        rule = await store.get_rule(rule_id)
-    except KeyError as exc:
-        raise _not_found(str(exc)) from exc
-
+    rule = await store.get_rule(rule_id)
     return to_rule_response(rule)
 
 
@@ -90,32 +85,26 @@ async def update_rule(
     payload: RuleUpdate,
     store: PolicyStore = Depends(get_policy_store),
 ) -> RuleResponse:
-    """Replaces an existing policy rule."""
-    try:
-        existing = await store.get_rule(rule_id)
-        updated_rule = PolicyRule(
-            id=existing.id,
-            created_at=existing.created_at,
-            updated_at=existing.updated_at,
-            name=payload.name,
-            action=payload.action,
-            tool_pattern=payload.tool_pattern,
-            rule_type=payload.rule_type,
-            priority=payload.priority,
-            enabled=payload.enabled,
-            constraints=[to_argument_constraint(item) for item in payload.constraints],
-            approval_timeout_seconds=payload.approval_timeout_seconds,
-            reason=payload.reason,
-            description=payload.description,
-            scope=payload.scope,
-            scope_id=payload.scope_id,
-        )
-        updated = await store.update_rule(updated_rule)
-    except KeyError as exc:
-        raise _not_found(str(exc)) from exc
-    except ValueError as exc:
-        raise _bad_request(str(exc)) from exc
-
+    """Replaces an existing policy rule, preserving its id and created_at."""
+    existing = await store.get_rule(rule_id)
+    updated_rule = PolicyRule(
+        id=existing.id,
+        created_at=existing.created_at,
+        updated_at=existing.updated_at,
+        name=payload.name,
+        action=payload.action,
+        tool_pattern=payload.tool_pattern,
+        rule_type=payload.rule_type,
+        priority=payload.priority,
+        enabled=payload.enabled,
+        constraints=[to_argument_constraint(item) for item in payload.constraints],
+        approval_timeout_seconds=payload.approval_timeout_seconds,
+        reason=payload.reason,
+        description=payload.description,
+        scope=payload.scope,
+        scope_id=payload.scope_id,
+    )
+    updated = await store.update_rule(updated_rule)
     return to_rule_response(updated)
 
 
@@ -125,11 +114,7 @@ async def delete_rule(
     store: PolicyStore = Depends(get_policy_store),
 ) -> Response:
     """Deletes a policy rule."""
-    try:
-        await store.delete_rule(rule_id)
-    except KeyError as exc:
-        raise _not_found(str(exc)) from exc
-
+    await store.delete_rule(rule_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -139,11 +124,7 @@ async def enable_rule(
     store: PolicyStore = Depends(get_policy_store),
 ) -> RuleResponse:
     """Enables a policy rule."""
-    try:
-        rule = await store.enable_rule(rule_id)
-    except KeyError as exc:
-        raise _not_found(str(exc)) from exc
-
+    rule = await store.enable_rule(rule_id)
     return to_rule_response(rule)
 
 
@@ -153,9 +134,5 @@ async def disable_rule(
     store: PolicyStore = Depends(get_policy_store),
 ) -> RuleResponse:
     """Disables a policy rule."""
-    try:
-        rule = await store.disable_rule(rule_id)
-    except KeyError as exc:
-        raise _not_found(str(exc)) from exc
-
+    rule = await store.disable_rule(rule_id)
     return to_rule_response(rule)

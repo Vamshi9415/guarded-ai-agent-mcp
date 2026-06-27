@@ -4,9 +4,13 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import Enum
+from types import UnionType
 from typing import Any
+from typing import get_args, get_origin
 
 from pydantic import BaseModel, ConfigDict, Field
+from pydantic import model_validator
 
 from backend.policy.models import (
     ApprovalRequest,
@@ -27,7 +31,48 @@ from backend.policy.models import (
 class APIModel(BaseModel):
     """Base API model with shared Pydantic configuration."""
 
-    model_config = ConfigDict(use_enum_values=True, from_attributes=True)
+    model_config = ConfigDict(
+        use_enum_values=False,
+        from_attributes=True,
+        json_encoders={Enum: lambda value: value.name},
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_enum_names(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+
+        coerced = dict(data)
+        for field_name, field_info in cls.model_fields.items():
+            if field_name not in coerced:
+                continue
+
+            enum_type = _enum_type_from_annotation(field_info.annotation)
+            if enum_type is None:
+                continue
+
+            value = coerced[field_name]
+            if isinstance(value, str) and value in enum_type.__members__:
+                coerced[field_name] = enum_type[value]
+
+        return coerced
+
+
+def _enum_type_from_annotation(annotation: Any) -> type[Enum] | None:
+    origin = get_origin(annotation)
+    if origin is None:
+        return annotation if isinstance(annotation, type) and issubclass(annotation, Enum) else None
+
+    if origin in {tuple, list, set, frozenset, dict}:
+        return None
+
+    if origin is UnionType or str(origin) == "typing.Union":
+        for arg in get_args(annotation):
+            if isinstance(arg, type) and issubclass(arg, Enum):
+                return arg
+
+    return None
 
 
 class ArgumentConstraintPayload(APIModel):
@@ -44,14 +89,14 @@ class ArgumentConstraintPayload(APIModel):
 class RuleCreate(APIModel):
     """Request body for creating a policy rule."""
 
-    name: str
+    name: str = Field(min_length=1)
     action: RuleAction
-    tool_pattern: str
+    tool_pattern: str = Field(min_length=1)
     rule_type: RuleType = RuleType.GLOB
     priority: int = 0
     enabled: bool = True
     constraints: list[ArgumentConstraintPayload] = Field(default_factory=list)
-    approval_timeout_seconds: int = 300
+    approval_timeout_seconds: int = Field(default=300, gt=0)
     reason: str | None = None
     description: str | None = None
     scope: RuleScope = RuleScope.GLOBAL
@@ -61,30 +106,41 @@ class RuleCreate(APIModel):
 class RuleUpdate(APIModel):
     """Request body for replacing an existing policy rule."""
 
-    name: str
+    name: str = Field(min_length=1)
     action: RuleAction
-    tool_pattern: str
+    tool_pattern: str = Field(min_length=1)
     rule_type: RuleType = RuleType.GLOB
     priority: int = 0
     enabled: bool = True
     constraints: list[ArgumentConstraintPayload] = Field(default_factory=list)
-    approval_timeout_seconds: int = 300
+    approval_timeout_seconds: int = Field(default=300, gt=0)
     reason: str | None = None
     description: str | None = None
     scope: RuleScope = RuleScope.GLOBAL
     scope_id: str | None = None
 
 
+# BudgetSetRequest kept as an alias so budgets.py doesn't break if old name slips in anywhere.
+# The canonical name going forward is BudgetUpdate.
 class BudgetUpdate(APIModel):
     """Request body for updating a conversation budget."""
 
-    max_tokens: int
+    max_tokens: int = Field(gt=0)
+
+
+# Backward-compatible alias — remove once all callers use BudgetUpdate.
+BudgetSetRequest = BudgetUpdate
 
 
 class ApprovalDecision(APIModel):
-    """Request body for resolving an approval."""
+    """Request body for resolving an approval.
 
-    approver: str
+    The field is named `resolved_by` to match ApprovalManager.approve() /
+    ApprovalManager.reject() parameter names exactly, avoiding the kwarg
+    mismatch that existed when it was called `approver`.
+    """
+
+    resolved_by: str
     reason: str | None = None
 
 
@@ -162,6 +218,7 @@ class HealthResponse(APIModel):
     status: str
     rules: int
     pending_approvals: int
+    version: str
 
 
 def to_argument_constraint(payload: ArgumentConstraintPayload) -> ArgumentConstraint:

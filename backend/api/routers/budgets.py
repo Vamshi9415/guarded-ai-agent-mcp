@@ -8,15 +8,15 @@ from fastapi import APIRouter, Depends
 from backend.api.dependencies import get_policy_store
 from backend.api.schemas import (
     BudgetResponse,
-    BudgetSetRequest,
     BudgetStateResponse,
+    BudgetUpdate,
     to_budget_response,
     to_budget_state_response,
 )
 from backend.policy.models import ConversationBudget
 from backend.policy.store import PolicyStore
 
-router = APIRouter(prefix="/budgets", tags=["budgets"])
+router = APIRouter(prefix="/budgets", tags=["Budgets"])
 
 
 @router.get("/default", response_model=BudgetResponse)
@@ -35,7 +35,7 @@ async def get_default_budget(
 
 @router.put("/default", response_model=BudgetResponse)
 async def set_default_budget(
-    payload: BudgetSetRequest,
+    payload: BudgetUpdate,
     store: PolicyStore = Depends(get_policy_store),
 ) -> BudgetResponse:
     """Sets the global default budget used when a conversation has no override."""
@@ -61,7 +61,7 @@ async def get_conversation_budget(
 @router.put("/{conversation_id}", response_model=BudgetResponse)
 async def set_conversation_budget(
     conversation_id: str,
-    payload: BudgetSetRequest,
+    payload: BudgetUpdate,
     store: PolicyStore = Depends(get_policy_store),
 ) -> BudgetResponse:
     """Sets or replaces a budget override for one conversation."""
