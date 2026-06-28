@@ -16,7 +16,8 @@
   "routes": [
     {
       "src": "/_/backend/(.*)",
-      "dest": "backend/app.py"
+      "dest": "backend/app.py",
+      "headers": { "Access-Control-Allow-Origin": "*" }
     },
     {
       "src": "/(.*)",
