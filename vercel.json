@@ -15,13 +15,12 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "backend/app.py",
-      "headers": { "Access-Control-Allow-Origin": "*" }
+      "src": "/_/backend/(.*)",
+      "dest": "backend/app.py"
     },
     {
       "src": "/(.*)",
-      "dest": "frontend/dist/index.html"
+      "dest": "frontend/$1"
     }
   ]
 }
