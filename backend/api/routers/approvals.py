@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends
 
 from backend.api.dependencies import get_approval_manager, get_policy_store
@@ -15,6 +17,7 @@ from backend.policy.approvals import ApprovalManager
 from backend.policy.store import PolicyStore
 
 router = APIRouter(prefix="/approvals", tags=["Approvals"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("/pending", response_model=list[ApprovalResponse])
@@ -23,6 +26,17 @@ async def list_pending_approvals(
 ) -> list[ApprovalResponse]:
     """Returns all currently pending approval requests."""
     approvals = await store.list_pending_approvals()
+    logger.info("Listed %d pending approval(s)", len(approvals))
+    return [to_approval_response(approval) for approval in approvals]
+
+
+@router.get("", response_model=list[ApprovalResponse])
+async def list_all_approvals(
+    store: PolicyStore = Depends(get_policy_store),
+) -> list[ApprovalResponse]:
+    """Returns every approval request, including resolved ones."""
+    approvals = await store.list_approvals()
+    logger.info("Listed %d approval(s)", len(approvals))
     return [to_approval_response(approval) for approval in approvals]
 
 

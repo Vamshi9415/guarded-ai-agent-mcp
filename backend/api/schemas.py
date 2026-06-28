@@ -26,6 +26,7 @@ from backend.policy.models import (
     RuleScope,
     RuleType,
 )
+from backend.mcp.models import RegisteredTool
 
 
 class APIModel(BaseModel):
@@ -164,6 +165,14 @@ class RuleResponse(APIModel):
     updated_at: datetime
 
 
+class ToolResponse(APIModel):
+    """Serialized MCP tool metadata for policy authoring."""
+
+    name: str
+    description: str | None = None
+    server_name: str
+
+
 class ApprovalResponse(APIModel):
     """Serialized approval request."""
 
@@ -219,6 +228,8 @@ class HealthResponse(APIModel):
     rules: int
     pending_approvals: int
     version: str
+    storage_backend: str = "mongo"
+    storage_ready: bool = True
 
 
 def to_argument_constraint(payload: ArgumentConstraintPayload) -> ArgumentConstraint:
@@ -236,6 +247,15 @@ def to_argument_constraint(payload: ArgumentConstraintPayload) -> ArgumentConstr
 def to_rule_response(rule: PolicyRule) -> RuleResponse:
     """Converts a PolicyRule dataclass into a response model."""
     return RuleResponse.model_validate(rule)
+
+
+def to_tool_response(tool: RegisteredTool) -> ToolResponse:
+    """Converts a discovered MCP tool into a response model."""
+    return ToolResponse(
+        name=tool.name,
+        description=tool.description,
+        server_name=tool.server_name,
+    )
 
 
 def to_approval_response(approval: ApprovalRequest) -> ApprovalResponse:

@@ -5,14 +5,14 @@ export type DecisionOutcome =
   | 'error';
 
 export interface LogEntry {
-  conversationid: string;
-  toolname: string;
+  conversation_id: string;
+  tool_name: string;
   arguments: Record<string, unknown>;
   outcome: string;
   timestamp: string;
-  executiontimems: number;
-  rewrittenarguments?: Record<string, unknown> | null;
+  execution_time_ms: number;
+  rewritten_arguments?: Record<string, unknown> | null;
   reason?: string | null;
-  matchedruleid?: string | null;
-  enginefailure: boolean;
+  matched_rule_id?: string | null;
+  engine_failure: boolean;
 }

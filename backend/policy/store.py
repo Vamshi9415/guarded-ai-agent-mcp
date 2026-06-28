@@ -147,6 +147,10 @@ class PolicyStore(Protocol):
         store's."""
         ...
 
+    async def list_approvals(self) -> list[ApprovalRequest]:
+        """Every approval in insertion order, pending and resolved."""
+        ...
+
     # -- Conversation budgets --------------------------------------------
 
     async def get_budget(self, conversation_id: str) -> ConversationBudget:
@@ -163,6 +167,14 @@ class PolicyStore(Protocol):
     async def set_budget(self, budget: ConversationBudget) -> ConversationBudget:
         """Upsert. budget.conversation_id=None sets the global default
         applied to any conversation without its own override."""
+        ...
+
+    async def delete_budget(self, conversation_id: str) -> None:
+        """Deletes a conversation-specific budget override if present."""
+        ...
+
+    async def list_budgets(self) -> list[ConversationBudget]:
+        """All stored budgets, including the global default if present."""
         ...
 
     async def get_budget_state(self, conversation_id: str) -> BudgetState:
@@ -324,6 +336,10 @@ class InMemoryPolicyStore(PolicyStore):
         ]
         return pending  # dict preserves insertion order -> creation order
 
+    async def list_approvals(self) -> list[ApprovalRequest]:
+        approvals = list(self._approvals.values())
+        return [deepcopy(approval) for approval in approvals]
+
     # -- Conversation budgets ----------------------------------------------
 
     async def get_budget(self, conversation_id: str) -> ConversationBudget:
@@ -342,6 +358,16 @@ class InMemoryPolicyStore(PolicyStore):
             stored = deepcopy(budget)
             self._budget_ceilings[budget.conversation_id] = stored
             return deepcopy(stored)
+
+    async def delete_budget(self, conversation_id: str) -> None:
+        async with self._budgets_lock:
+            if conversation_id not in self._budget_ceilings:
+                raise _missing("budget", conversation_id)
+            del self._budget_ceilings[conversation_id]
+
+    async def list_budgets(self) -> list[ConversationBudget]:
+        budgets = list(self._budget_ceilings.values())
+        return [deepcopy(budget) for budget in budgets]
 
     async def get_budget_state(self, conversation_id: str) -> BudgetState:
         state = self._budget_states.get(conversation_id)  # lock-free

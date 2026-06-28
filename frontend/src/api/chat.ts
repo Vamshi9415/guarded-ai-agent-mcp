@@ -2,11 +2,16 @@ import { apiClient } from './client'
 import type {
   ChatRequest,
   ChatResponse,
+  ConversationTranscript,
   ConversationSummary,
 } from '../types/chat'
 
+const CHAT_REQUEST_TIMEOUT_MS = 120_000
+
 export async function sendChatMessage(payload: ChatRequest): Promise<ChatResponse> {
-  const response = await apiClient.post<ChatResponse>('/chat', payload)
+  const response = await apiClient.post<ChatResponse>('/chat', payload, {
+    timeout: CHAT_REQUEST_TIMEOUT_MS,
+  })
   return response.data
 }
 
@@ -26,4 +31,11 @@ export async function resetConversation(
 
 export async function deleteConversation(conversationId: string): Promise<void> {
   await apiClient.delete(`/chat/${conversationId}`)
+}
+
+export async function getConversationTranscript(
+  conversationId: string,
+): Promise<ConversationTranscript> {
+  const response = await apiClient.get<ConversationTranscript>(`/chat/${conversationId}/messages`) 
+  return response.data
 }

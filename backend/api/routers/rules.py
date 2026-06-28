@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, Response, status
@@ -19,6 +20,7 @@ from backend.policy.models import PolicyRule
 from backend.policy.store import PolicyStore
 
 router = APIRouter(prefix="/rules", tags=["Rules"])
+logger = logging.getLogger(__name__)
 
 
 def _new_rule_id() -> str:
@@ -64,8 +66,18 @@ async def create_rule(
     store: PolicyStore = Depends(get_policy_store),
 ) -> RuleResponse:
     """Creates a new policy rule."""
+    logger.info(
+        "Creating rule name=%s tool_pattern=%s rule_type=%s action=%s priority=%s scope=%s",
+        payload.name,
+        payload.tool_pattern,
+        payload.rule_type,
+        payload.action,
+        payload.priority,
+        payload.scope,
+    )
     rule = _build_policy_rule(payload)
     created = await store.create_rule(rule)
+    logger.info("Created rule id=%s name=%s", created.id, created.name)
     return to_rule_response(created)
 
 
@@ -86,6 +98,16 @@ async def update_rule(
     store: PolicyStore = Depends(get_policy_store),
 ) -> RuleResponse:
     """Replaces an existing policy rule, preserving its id and created_at."""
+    logger.info(
+        "Updating rule id=%s name=%s tool_pattern=%s rule_type=%s action=%s priority=%s enabled=%s",
+        rule_id,
+        payload.name,
+        payload.tool_pattern,
+        payload.rule_type,
+        payload.action,
+        payload.priority,
+        payload.enabled,
+    )
     existing = await store.get_rule(rule_id)
     updated_rule = PolicyRule(
         id=existing.id,
@@ -105,6 +127,7 @@ async def update_rule(
         scope_id=payload.scope_id,
     )
     updated = await store.update_rule(updated_rule)
+    logger.info("Updated rule id=%s name=%s", updated.id, updated.name)
     return to_rule_response(updated)
 
 

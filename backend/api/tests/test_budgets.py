@@ -14,10 +14,32 @@ def test_get_default_budget(client: TestClient) -> None:
     assert "max_tokens" in body
 
 
+def test_list_budgets_empty_returns_default_only(client: TestClient) -> None:
+    response = client.get("/api/budgets")
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 0
+
+
 def test_set_default_budget(client: TestClient) -> None:
     response = client.put("/api/budgets/default", json={"max_tokens": 5000})
     assert response.status_code == 200
     assert response.json()["max_tokens"] == 5000
+
+
+def test_list_budgets_after_updates(client: TestClient) -> None:
+    client.put("/api/budgets/default", json={"max_tokens": 5000})
+    client.put("/api/budgets/conv-123", json={"max_tokens": 2000})
+    response = client.get("/api/budgets")
+    assert response.status_code == 200
+    assert len(response.json()) == 2
+
+
+def test_reset_conversation_budget(client: TestClient) -> None:
+    client.put("/api/budgets/conv-123", json={"max_tokens": 2000})
+    response = client.delete("/api/budgets/conv-123")
+    assert response.status_code == 200
+    assert response.json()["conversation_id"] == "conv-123"
 
 
 def test_set_budget_invalid_zero_rejected(client: TestClient) -> None:

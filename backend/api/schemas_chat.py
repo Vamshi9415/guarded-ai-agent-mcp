@@ -12,6 +12,7 @@ These schemas cover the two new surface areas:
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import Field
 
@@ -64,6 +65,22 @@ class ChatResponse(APIModel):
 
     conversation_id: str
     reply: str
+
+
+class ChatMessage(APIModel):
+    """One visible message in a conversation transcript."""
+
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class ConversationTranscript(APIModel):
+    """Full conversation transcript returned to the chat UI."""
+
+    conversation_id: str
+    created_at: datetime
+    message_count: int
+    messages: list[ChatMessage]
 
 
 class ConversationSummary(APIModel):

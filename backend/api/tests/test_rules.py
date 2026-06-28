@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -62,6 +64,15 @@ def test_create_rule_invalid_action_rejected(client: TestClient) -> None:
     payload = {**VALID_RULE, "action": "deny"}   # "deny" is NOT a valid RuleAction
     response = client.post("/api/rules", json=payload)
     assert response.status_code == 422
+
+
+def test_create_rule_validation_error_is_logged(client: TestClient, caplog: pytest.LogCaptureFixture) -> None:
+    payload = {"name": "missing-tool-pattern"}
+    with caplog.at_level(logging.WARNING):
+        response = client.post("/api/rules", json=payload)
+
+    assert response.status_code == 422
+    assert "Request validation failed POST /api/rules" in caplog.text
 
 
 def test_update_rule(client: TestClient) -> None:

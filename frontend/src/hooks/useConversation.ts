@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   deleteConversation,
+  getConversationTranscript,
   listConversations,
   resetConversation,
 } from '../api'
 
 export const CONVERSATIONS_QUERY_KEY = ['chat', 'conversations'] as const
+export const CONVERSATION_TRANSCRIPT_QUERY_KEY = ['chat', 'transcript'] as const
 
 export function useConversations() {
   return useQuery({
@@ -34,5 +36,14 @@ export function useDeleteConversation() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: CONVERSATIONS_QUERY_KEY })
     },
+  })
+}
+
+export function useConversationTranscript(conversationId: string | null) {
+  return useQuery({
+    queryKey: [...CONVERSATION_TRANSCRIPT_QUERY_KEY, conversationId],
+    queryFn: () => getConversationTranscript(conversationId as string),
+    enabled: conversationId !== null,
+    staleTime: 10_000,
   })
 }

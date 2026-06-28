@@ -38,7 +38,13 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from backend.agent.agent_manager import AgentManager
 from backend.api.dependencies import get_agent_manager
-from backend.api.schemas_chat import ChatRequest, ChatResponse, ConversationSummary
+from backend.api.schemas_chat import (
+    ChatRequest,
+    ChatResponse,
+    ChatMessage,
+    ConversationSummary,
+    ConversationTranscript,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +90,7 @@ async def chat(
     reply = await agent.chat(payload.message)
     elapsed_ms = (time.perf_counter() - t0) * 1000
 
-    manager.update_meta(cid)
+    manager.save(cid)
 
     logger.info(
         "Chat reply   | conversation=%s | reply_length=%d | duration_ms=%.1f",
@@ -94,6 +100,29 @@ async def chat(
     )
 
     return ChatResponse(conversation_id=cid, reply=reply)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/chat/{conversation_id}/messages
+# ---------------------------------------------------------------------------
+
+@router.get("/{conversation_id}/messages", response_model=ConversationTranscript)
+async def get_messages(
+    conversation_id: str,
+    manager: AgentManager = Depends(get_agent_manager),
+) -> ConversationTranscript:
+    transcript = manager.get_transcript(conversation_id)
+    messages = [
+        ChatMessage(role=message.role, content=message.content or "")
+        for message in transcript.messages
+        if message.role in {"user", "assistant"}
+    ]
+    return ConversationTranscript(
+        conversation_id=conversation_id,
+        created_at=transcript.created_at,
+        message_count=transcript.message_count,
+        messages=messages,
+    )
 
 
 # ---------------------------------------------------------------------------

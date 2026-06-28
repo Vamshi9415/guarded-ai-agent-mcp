@@ -1,77 +1,24 @@
 # backend/agent/agent_manager.py
-"""AgentManager — lifecycle owner for all active Agent instances.
+"""AgentManager — lifecycle owner for active Agent instances and chat persistence.
 
-Responsibilities
-----------------
-- Create new Agent objects on demand, each with its own conversation history.
-- Return an existing Agent by conversation_id for follow-up turns.
-- Reset or delete conversations.
-- List all active conversations with lightweight metadata.
-
-What this class deliberately does NOT do
------------------------------------------
-- No business logic.
-- No LLM calls.
-- No MCP calls.
-- No policy decisions.
-
-All of those remain in Agent → ToolLoop → PolicyEngine → ToolRegistry → MCPManager,
-exactly as they were before this file existed.
-
-Sharing a single ToolLoop across all Agent instances
-------------------------------------------------------
-Every Agent created here receives the same ToolLoop singleton.  The ToolLoop
-itself is stateless between turns — it holds no per-conversation data, only
-references to the shared LLM client, ToolRegistry, and PolicyEngine.
-
-Agent is the only object that is per-conversation (it owns the message history
-and the conversation_id).  Sharing ToolLoop across agents is therefore safe and
-is how run_agent.py and test_agent_scenarios.py already operate.
-
-Thread-safety note
-------------------
-This class is not safe for concurrent mutations from multiple coroutines.
-FastAPI's default single-threaded asyncio event loop means that awaited calls
-are interleaved, never truly concurrent, so the dict operations below are safe
-without a lock.  If multi-worker deployment is added later, replace
-``_agents`` with a proper shared store (Redis, etc.).
+The in-memory Agent cache remains the fast path for currently active
+conversations, but the source of truth for conversation history is the chat
+store injected here. That lets the API reload old conversations after a page
+refresh or process restart instead of dropping back to an empty window.
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from collections.abc import Callable
 from typing import Iterator
 
 from backend.agent.agent import Agent
+from backend.agent.chat_store import ChatStore, ConversationTranscript, InMemoryChatStore
 from backend.agent.tool_loop import ToolLoop
+from backend.llm.base import Message
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class ConversationMeta:
-    """Lightweight metadata stored alongside each active Agent.
-
-    Kept separate from Agent itself so Agent remains unaware of any
-    management layer on top of it.
-    """
-
-    conversation_id: str
-    created_at: datetime = field(
-        default_factory=lambda: datetime.now(tz=timezone.utc)
-    )
-    message_count: int = 0
-
-    def refresh_message_count(self, agent: Agent) -> None:
-        """Syncs message_count from the agent's current history.
-
-        The system prompt counts as the first message, so subtract 1 to
-        report only the user/assistant turns visible to the caller.
-        """
-        self.message_count = sum(1 for message in agent.messages if message.role == "user")
 
 
 class AgentManager:
@@ -89,11 +36,15 @@ class AgentManager:
             this same ToolLoop.
     """
 
-    def __init__(self, tool_loop: ToolLoop | Callable[[], ToolLoop]) -> None:
+    def __init__(
+        self,
+        tool_loop: ToolLoop | Callable[[], ToolLoop],
+        chat_store: ChatStore | None = None,
+    ) -> None:
         self._tool_loop = tool_loop
+        self._chat_store = chat_store or InMemoryChatStore()
         # Keyed by conversation_id — insertion-ordered in Python 3.7+.
         self._agents: dict[str, Agent] = {}
-        self._meta: dict[str, ConversationMeta] = {}
 
     # ------------------------------------------------------------------
     # Public interface
@@ -119,11 +70,21 @@ class AgentManager:
             logger.debug("create() called for existing conversation %s — returning existing agent", conversation_id)
             return self._agents[conversation_id]
 
-        agent = Agent(tool_loop=self._resolve_tool_loop(), conversation_id=conversation_id)
+        transcript = None
+        if conversation_id is not None:
+            try:
+                transcript = self._chat_store.get_conversation(conversation_id)
+            except KeyError:
+                transcript = None
+
+        agent = Agent(
+            tool_loop=self._resolve_tool_loop(),
+            conversation_id=conversation_id,
+            messages=list(transcript.messages) if transcript is not None else None,
+        )
         cid = agent.conversation_id   # read back in case Agent generated it
 
         self._agents[cid] = agent
-        self._meta[cid] = ConversationMeta(conversation_id=cid)
 
         logger.info("Created new conversation %s (total active: %d)", cid, len(self._agents))
         return agent
@@ -135,10 +96,22 @@ class AgentManager:
             KeyError: If no active conversation with that id exists.
                 The global exception handler converts this to HTTP 404.
         """
+        agent = self._agents.get(conversation_id)
+        if agent is not None:
+            return agent
+
         try:
-            return self._agents[conversation_id]
+            transcript = self._chat_store.get_conversation(conversation_id)
         except KeyError:
             raise KeyError(f"Conversation '{conversation_id}' not found") from None
+
+        agent = Agent(
+            tool_loop=self._resolve_tool_loop(),
+            conversation_id=conversation_id,
+            messages=list(transcript.messages),
+        )
+        self._agents[conversation_id] = agent
+        return agent
 
     def get_or_create(self, conversation_id: str | None) -> Agent:
         """Returns an existing Agent or creates a new one.
@@ -178,7 +151,7 @@ class AgentManager:
         """
         agent = self.get(conversation_id)
         agent.reset()
-        self._meta[conversation_id].message_count = 0
+        self._save_agent(agent)
         logger.info("Reset conversation %s", conversation_id)
         return agent
 
@@ -193,25 +166,39 @@ class AgentManager:
         """
         self.get(conversation_id)   # raises KeyError if missing
         del self._agents[conversation_id]
-        del self._meta[conversation_id]
+        self._chat_store.delete_conversation(conversation_id)
         logger.info("Deleted conversation %s (total active: %d)", conversation_id, len(self._agents))
 
-    def list_conversations(self) -> list[ConversationMeta]:
-        """Returns metadata for all active conversations, oldest first."""
-        for cid, meta in self._meta.items():
-            meta.refresh_message_count(self._agents[cid])
-        return list(self._meta.values())
+    def list_conversations(self) -> list[ConversationTranscript]:
+        """Returns persisted conversation metadata, oldest first."""
+        return self._chat_store.list_conversations()
 
-    def update_meta(self, conversation_id: str) -> None:
-        """Refreshes the message_count for one conversation after a chat turn.
+    def save(self, conversation_id: str) -> None:
+        """Persists the latest in-memory transcript for one conversation."""
+        agent = self.get(conversation_id)
+        self._save_agent(agent)
 
-        Called by the chat router after agent.chat() returns so that
-        list_conversations() reports up-to-date counts.
-        """
-        if conversation_id in self._meta:
-            self._meta[conversation_id].refresh_message_count(
-                self._agents[conversation_id]
+    def get_messages(self, conversation_id: str) -> tuple["Message", ...]:
+        agent = self._agents.get(conversation_id)
+        if agent is not None:
+            return agent.messages
+        transcript = self._chat_store.get_conversation(conversation_id)
+        return tuple(transcript.messages)
+
+    def get_transcript(self, conversation_id: str) -> ConversationTranscript:
+        agent = self._agents.get(conversation_id)
+        if agent is not None:
+            try:
+                existing = self._chat_store.get_conversation(conversation_id)
+                created_at = existing.created_at
+            except KeyError:
+                created_at = ConversationTranscript(conversation_id=conversation_id).created_at
+            return ConversationTranscript(
+                conversation_id=conversation_id,
+                created_at=created_at,
+                messages=list(agent.messages),
             )
+        return self._chat_store.get_conversation(conversation_id)
 
     # ------------------------------------------------------------------
     # Internal
@@ -221,7 +208,22 @@ class AgentManager:
         if hasattr(self._tool_loop, "run"):
             return self._tool_loop
         return self._tool_loop()
-    
+
+    def _save_agent(self, agent: Agent) -> None:
+        try:
+            existing = self._chat_store.get_conversation(agent.conversation_id)
+            created_at = existing.created_at
+        except KeyError:
+            created_at = ConversationTranscript(conversation_id=agent.conversation_id).created_at
+
+        self._chat_store.save_conversation(
+            ConversationTranscript(
+                conversation_id=agent.conversation_id,
+                created_at=created_at,
+                messages=list(agent.messages),
+            )
+        )
+
     def __len__(self) -> int:
         return len(self._agents)
 

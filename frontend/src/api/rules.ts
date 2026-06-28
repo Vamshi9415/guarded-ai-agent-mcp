@@ -5,6 +5,76 @@ import type {
   RuleUpdateRequest,
 } from '../types/rules';
 
+type ApiRuleRequest = {
+  name: string;
+  action: RuleCreateRequest['action'];
+  tool_pattern: string;
+  rule_type: RuleCreateRequest['ruletype'];
+  priority: number;
+  enabled: boolean;
+  constraints: RuleCreateRequest['constraints'];
+  approval_timeout_seconds: number;
+  reason: string | null;
+  description: string | null;
+  scope: RuleCreateRequest['scope'];
+  scope_id: string | null;
+};
+
+type ApiRuleResponse = {
+  id: string;
+  name: string;
+  action: RuleResponse['action'];
+  tool_pattern: string;
+  rule_type: RuleResponse['ruletype'];
+  priority: number;
+  enabled: boolean;
+  constraints: RuleResponse['constraints'];
+  approval_timeout_seconds: number;
+  reason: string | null;
+  description: string | null;
+  scope: RuleResponse['scope'];
+  scope_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+function toFrontendRule(rule: ApiRuleResponse): RuleResponse {
+  return {
+    id: rule.id,
+    name: rule.name,
+    action: rule.action,
+    toolpattern: rule.tool_pattern,
+    ruletype: rule.rule_type,
+    priority: rule.priority,
+    enabled: rule.enabled,
+    constraints: rule.constraints,
+    approvaltimeoutseconds: rule.approval_timeout_seconds,
+    reason: rule.reason,
+    description: rule.description,
+    scope: rule.scope,
+    scopeid: rule.scope_id,
+    createdat: rule.created_at,
+    updatedat: rule.updated_at,
+  };
+}
+
+function toBackendRule(payload: RuleCreateRequest | RuleUpdateRequest): ApiRuleRequest {
+  return {
+    name: payload.name,
+    action: payload.action,
+    tool_pattern: payload.toolpattern,
+    rule_type: payload.ruletype,
+    priority: payload.priority,
+    enabled: payload.enabled,
+    constraints: payload.constraints,
+    approval_timeout_seconds: payload.approvaltimeoutseconds,
+    reason: payload.reason,
+    description: payload.description,
+    scope: payload.scope,
+    scope_id: payload.scopeid,
+  };
+}
+
 // Mock data when backend unavailable
 const MOCK_RULES: RuleResponse[] = [
   {
@@ -64,8 +134,8 @@ let mockRules = [...MOCK_RULES];
 
 export async function listRules(): Promise<RuleResponse[]> {
   try {
-    const response = await apiClient.get<RuleResponse[]>('/rules');
-    return response.data;
+    const response = await apiClient.get<ApiRuleResponse[]>('/rules');
+    return response.data.map((rule) => toFrontendRule(rule));
   } catch {
     return mockRules;
   }
@@ -73,8 +143,8 @@ export async function listRules(): Promise<RuleResponse[]> {
 
 export async function getRule(ruleId: string): Promise<RuleResponse> {
   try {
-    const response = await apiClient.get<RuleResponse>(`/rules/${ruleId}`);
-    return response.data;
+    const response = await apiClient.get<ApiRuleResponse>(`/rules/${ruleId}`);
+    return toFrontendRule(response.data);
   } catch {
     const rule = mockRules.find(r => r.id === ruleId);
     if (!rule) throw new Error(`Rule ${ruleId} not found`);
@@ -84,8 +154,8 @@ export async function getRule(ruleId: string): Promise<RuleResponse> {
 
 export async function createRule(payload: RuleCreateRequest): Promise<RuleResponse> {
   try {
-    const response = await apiClient.post<RuleResponse>('/rules', payload);
-    return response.data;
+    const response = await apiClient.post<ApiRuleResponse>('/rules', toBackendRule(payload));
+    return toFrontendRule(response.data);
   } catch {
     const newRule: RuleResponse = {
       ...payload,
@@ -100,8 +170,8 @@ export async function createRule(payload: RuleCreateRequest): Promise<RuleRespon
 
 export async function updateRule(ruleId: string, payload: RuleUpdateRequest): Promise<RuleResponse> {
   try {
-    const response = await apiClient.put<RuleResponse>(`/rules/${ruleId}`, payload);
-    return response.data;
+    const response = await apiClient.put<ApiRuleResponse>(`/rules/${ruleId}`, toBackendRule(payload));
+    return toFrontendRule(response.data);
   } catch {
     const idx = mockRules.findIndex(r => r.id === ruleId);
     if (idx === -1) throw new Error(`Rule ${ruleId} not found`);

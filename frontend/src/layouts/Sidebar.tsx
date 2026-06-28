@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import {
   Box,
   Chip,
@@ -24,7 +24,6 @@ export type SidebarProps = {
 
 export default function Sidebar({ onNavigate }: SidebarProps) {
   const location = useLocation()
-  const navigate = useNavigate()
   const { data: health, isLoading: healthLoading, isError: healthError } = useHealth()
 
   const activePath = useMemo(() => {
@@ -59,15 +58,16 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
           return (
             <ListItemButton
               key={item.path}
+              component={NavLink}
+              to={item.path}
+              end
               selected={selected}
-              onClick={() => {
-                navigate(item.path)
-                onNavigate?.()
-              }}
+              onClick={onNavigate}
               sx={{
                 borderRadius: 2,
                 mb: 0.5,
                 mx: 0.5,
+                textDecoration: 'none',
                 '&.Mui-selected': {
                   bgcolor: 'primary.main',
                   color: 'primary.contrastText',

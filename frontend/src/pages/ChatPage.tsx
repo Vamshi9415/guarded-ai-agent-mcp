@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
   Box,
@@ -22,7 +23,14 @@ import RefreshIcon from '@mui/icons-material/Refresh'
 import SendIcon from '@mui/icons-material/Send'
 import SmartToyIcon from '@mui/icons-material/SmartToy'
 import PersonIcon from '@mui/icons-material/Person'
-import { useDeleteConversation, useConversations, useResetConversation } from '../hooks/useConversation'
+import {
+  CONVERSATIONS_QUERY_KEY,
+  CONVERSATION_TRANSCRIPT_QUERY_KEY,
+  useConversationTranscript,
+  useDeleteConversation,
+  useConversations,
+  useResetConversation,
+} from '../hooks/useConversation'
 import { useSendMessage } from '../hooks/useChat'
 import type { ConversationSummary } from '../types/chat'
 
@@ -33,7 +41,6 @@ import type { ConversationSummary } from '../types/chat'
 interface LocalMessage {
   role: 'user' | 'assistant'
   content: string
-  ts: number
 }
 
 // ---------------------------------------------------------------------------
@@ -251,8 +258,10 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<LocalMessage[]>([])
   const [input, setInput] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
+  const queryClient = useQueryClient()
 
   const { data: conversations, isLoading: convsLoading } = useConversations()
+  const transcriptQuery = useConversationTranscript(activeConversationId)
   const sendMutation = useSendMessage()
   const resetMutation = useResetConversation()
   const deleteMutation = useDeleteConversation()
@@ -262,6 +271,22 @@ export default function ChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, sendMutation.isPending])
 
+  useEffect(() => {
+    if (!activeConversationId) {
+      setMessages([])
+      return
+    }
+
+    if (transcriptQuery.data) {
+      setMessages(
+        transcriptQuery.data.messages.map((message) => ({
+          role: message.role,
+          content: message.content,
+        })),
+      )
+    }
+  }, [activeConversationId, transcriptQuery.data])
+
   const handleNewConversation = useCallback(() => {
     setActiveConversationId(null)
     setMessages([])
@@ -269,18 +294,14 @@ export default function ChatPage() {
   }, [])
 
   const handleSelectConversation = useCallback((conv: ConversationSummary) => {
-    // When switching convs we just clear local history and let the user re-query.
-    // Full history retrieval would need a GET /chat/{id}/messages endpoint
-    // (not yet in the backend spec), so we start fresh per conversation switch.
     setActiveConversationId(conv.conversation_id)
-    setMessages([])
   }, [])
 
   const handleSend = useCallback(async () => {
     const text = input.trim()
     if (!text || sendMutation.isPending) return
 
-    const userMsg: LocalMessage = { role: 'user', content: text, ts: Date.now() }
+    const userMsg: LocalMessage = { role: 'user', content: text }
     setMessages((prev) => [...prev, userMsg])
     setInput('')
 
@@ -293,10 +314,12 @@ export default function ChatPage() {
       if (!activeConversationId) {
         setActiveConversationId(result.conversation_id)
       }
+      await queryClient.invalidateQueries({
+        queryKey: [...CONVERSATION_TRANSCRIPT_QUERY_KEY, result.conversation_id],
+      })
       const assistantMsg: LocalMessage = {
         role: 'assistant',
         content: result.reply,
-        ts: Date.now(),
       }
       setMessages((prev) => [...prev, assistantMsg])
     } catch (err: unknown) {
@@ -304,11 +327,10 @@ export default function ChatPage() {
       const errorMsg: LocalMessage = {
         role: 'assistant',
         content: `⚠️ Error: ${message}`,
-        ts: Date.now(),
       }
       setMessages((prev) => [...prev, errorMsg])
     }
-  }, [input, activeConversationId, sendMutation])
+  }, [activeConversationId, queryClient, input, sendMutation])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -323,25 +345,30 @@ export default function ChatPage() {
   const handleReset = useCallback(
     async (id: string) => {
       await resetMutation.mutateAsync(id)
+      await queryClient.invalidateQueries({ queryKey: [...CONVERSATION_TRANSCRIPT_QUERY_KEY, id] })
+      await queryClient.invalidateQueries({ queryKey: CONVERSATIONS_QUERY_KEY })
       if (activeConversationId === id) {
         setMessages([])
       }
     },
-    [activeConversationId, resetMutation],
+    [activeConversationId, queryClient, resetMutation],
   )
 
   const handleDelete = useCallback(
     async (id: string) => {
       await deleteMutation.mutateAsync(id)
+      await queryClient.invalidateQueries({ queryKey: [...CONVERSATION_TRANSCRIPT_QUERY_KEY, id] })
+      await queryClient.invalidateQueries({ queryKey: CONVERSATIONS_QUERY_KEY })
       if (activeConversationId === id) {
         setActiveConversationId(null)
         setMessages([])
       }
     },
-    [activeConversationId, deleteMutation],
+    [activeConversationId, deleteMutation, queryClient],
   )
 
-  const isEmpty = messages.length === 0 && !sendMutation.isPending
+  const isLoadingTranscript = Boolean(activeConversationId) && transcriptQuery.isFetching && messages.length === 0
+  const isEmpty = messages.length === 0 && !sendMutation.isPending && !isLoadingTranscript
 
   return (
     <Box sx={{ display: 'flex', height: 'calc(100vh - 128px)', gap: 0, overflow: 'hidden' }}>
@@ -470,6 +497,14 @@ export default function ChatPage() {
                 Type a message below to interact with the guarded agent.
                 <br />
                 Policy rules will be applied to every request.
+              </Typography>
+            </Box>
+          )}
+
+          {isLoadingTranscript && (
+            <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Typography variant="body2" color="text.disabled">
+                Loading conversation history…
               </Typography>
             </Box>
           )}

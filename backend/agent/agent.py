@@ -88,6 +88,7 @@ class Agent:
         tool_loop: ToolLoop,
         conversation_id: str | None = None,
         system_prompt: str = DEFAULT_SYSTEM_PROMPT,
+        messages: list[Message] | None = None,
     ) -> None:
         """
         Args:
@@ -112,7 +113,9 @@ class Agent:
         self._tool_loop = tool_loop
         self._conversation_id = conversation_id or str(uuid.uuid4())
         self._system_prompt = system_prompt
-        self._messages: list[Message] = [Message.system(system_prompt)]
+        self._messages: list[Message] = messages if messages is not None else [Message.system(system_prompt)]
+        if not self._messages:
+            self._messages = [Message.system(system_prompt)]
 
     # ------------------------------------------------------------------
     # Public read-only state

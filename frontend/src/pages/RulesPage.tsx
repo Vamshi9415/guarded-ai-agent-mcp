@@ -4,6 +4,7 @@ import {
   Box,
   Button,
   Chip,
+  Autocomplete,
   Dialog,
   DialogActions,
   DialogContent,
@@ -20,6 +21,8 @@ import {
   Snackbar,
   Stack,
   Switch,
+  ToggleButton,
+  ToggleButtonGroup,
   Table,
   TableBody,
   TableCell,
@@ -39,7 +42,9 @@ import SearchIcon from '@mui/icons-material/Search';
 import GavelIcon from '@mui/icons-material/Gavel';
 
 import { useCreateRule, useDeleteRule, useRules, useUpdateRule } from '../hooks/useRules';
+import { useTools } from '../hooks/useTools';
 import type { RuleAction, RuleCreate, RuleResponse, RuleScope, RuleType } from '../types/rules';
+import type { ToolResponse } from '../types/tools';
 
 function formatDate(iso: string) {
   try { return new Date(iso).toLocaleString(); } catch { return iso; }
@@ -71,9 +76,17 @@ const DEFAULT_FORM: RuleCreate = {
 };
 
 type Order = 'asc' | 'desc';
+type ToolMode = 'existing' | 'pattern';
+
+type ToolOption = ToolResponse;
+
+function isKnownTool(tool: string, tools: ToolOption[]) {
+  return tools.some(option => option.name === tool);
+}
 
 export default function RulesPage() {
   const { data: rules = [], isLoading, isError, error } = useRules();
+  const { data: tools = [], isLoading: toolsLoading, isError: toolsError } = useTools();
   const createRule = useCreateRule();
   const updateRule = useUpdateRule();
   const deleteRule = useDeleteRule();
@@ -88,6 +101,7 @@ export default function RulesPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<RuleResponse | null>(null);
   const [form, setForm] = useState<RuleCreate>(DEFAULT_FORM);
+  const [toolMode, setToolMode] = useState<ToolMode>('existing');
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<RuleResponse | null>(null);
@@ -96,7 +110,11 @@ export default function RulesPage() {
     open: false, message: '', severity: 'success',
   });
 
-  const toolOptions = useMemo(() => [...new Set(rules.map(r => r.toolpattern))], [rules]);
+  const ruleToolPatterns = useMemo(() => [...new Set(rules.map(r => r.toolpattern))], [rules]);
+  const toolOptions = useMemo(() => {
+    if (tools.length > 0) return tools;
+    return ruleToolPatterns.map(name => ({ name, description: null, server_name: 'policy-rules' }));
+  }, [tools, ruleToolPatterns]);
 
   const filtered = useMemo(() => {
     let result = rules;
@@ -116,11 +134,13 @@ export default function RulesPage() {
   function openAdd() {
     setEditTarget(null);
     setForm(DEFAULT_FORM);
+    setToolMode('existing');
     setEditOpen(true);
   }
 
   function openEdit(rule: RuleResponse) {
     setEditTarget(rule);
+    setToolMode(rule.ruletype === 'exact' && isKnownTool(rule.toolpattern, toolOptions) ? 'existing' : 'pattern');
     setForm({
       name: rule.name, action: rule.action, toolpattern: rule.toolpattern,
       ruletype: rule.ruletype, priority: rule.priority, enabled: rule.enabled,
@@ -170,6 +190,9 @@ export default function RulesPage() {
   }
 
   const saving = createRule.isPending || updateRule.isPending;
+  const toolDescription = toolMode === 'existing'
+    ? 'Choose from registered MCP tools discovered from the backend.'
+    : 'Use patterns for enterprise rules, such as glob or regex matching.';
 
   return (
     <Stack spacing={3}>
@@ -180,6 +203,12 @@ export default function RulesPage() {
 
       {isError && (
         <Alert severity="error">{error instanceof Error ? error.message : 'Failed to load rules.'}</Alert>
+      )}
+
+      {toolsError && (
+        <Alert severity="warning">
+          Tool discovery is unavailable right now. Existing tool names will be inferred from saved rules.
+        </Alert>
       )}
 
       {/* Toolbar */}
@@ -194,7 +223,7 @@ export default function RulesPage() {
           <InputLabel>Tool</InputLabel>
           <Select value={filterTool} label="Tool" onChange={e => { setFilterTool(e.target.value); setPage(0); }}>
             <MenuItem value="">All tools</MenuItem>
-            {toolOptions.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+            {toolOptions.map(t => <MenuItem key={t.name} value={t.name}>{t.name}</MenuItem>)}
           </Select>
         </FormControl>
         <FormControl size="small" sx={{ minWidth: 140 }}>
@@ -284,7 +313,58 @@ export default function RulesPage() {
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
             <TextField label="Rule Name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} fullWidth required />
-            <TextField label="Tool Pattern" value={form.toolpattern} onChange={e => setForm(f => ({ ...f, toolpattern: e.target.value }))} fullWidth required />
+            <Stack spacing={1}>
+              <ToggleButtonGroup
+                size="small"
+                exclusive
+                value={toolMode}
+                onChange={(_, value: ToolMode | null) => value && setToolMode(value)}
+              >
+                <ToggleButton value="existing">Select Existing Tool</ToggleButton>
+                <ToggleButton value="pattern">Pattern</ToggleButton>
+              </ToggleButtonGroup>
+              <Typography variant="caption" color="text.secondary">
+                {toolDescription}
+              </Typography>
+            </Stack>
+            {toolMode === 'existing' ? (
+              <Autocomplete
+                options={toolOptions}
+                loading={toolsLoading}
+                value={toolOptions.find(tool => tool.name === form.toolpattern) ?? null}
+                isOptionEqualToValue={(option, value) => option.name === value.name}
+                getOptionLabel={(option) => option.name}
+                onChange={(_, value) => setForm(f => ({ ...f, toolpattern: value?.name ?? '', ruletype: 'exact' }))}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Tool"
+                    placeholder="Search registered tools"
+                    helperText="Select a discovered MCP tool to avoid typos."
+                    required
+                  />
+                )}
+                renderOption={(props, option) => (
+                  <li {...props} key={option.name}>
+                    <Box>
+                      <Typography variant="body2" fontWeight={600}>{option.name}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {option.description ?? `Source: ${option.server_name}`}
+                      </Typography>
+                    </Box>
+                  </li>
+                )}
+              />
+            ) : (
+              <TextField
+                label="Tool Pattern"
+                value={form.toolpattern}
+                onChange={e => setForm(f => ({ ...f, toolpattern: e.target.value }))}
+                fullWidth
+                required
+                helperText="Examples: github_*, finance.*, or ^send_.*$"
+              />
+            )}
             <Stack direction="row" spacing={2}>
               <FormControl fullWidth>
                 <InputLabel>Action</InputLabel>

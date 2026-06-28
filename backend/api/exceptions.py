@@ -8,8 +8,13 @@ correct HTTP responses, rather than importing HTTPException everywhere.
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+
+logger = logging.getLogger(__name__)
 
 
 def not_found(detail: str) -> HTTPException:
@@ -29,6 +34,21 @@ def conflict(detail: str) -> HTTPException:
 
 def register_exception_handlers(app: FastAPI) -> None:
     """Registers global exception handlers on the app instance."""
+
+    @app.exception_handler(RequestValidationError)
+    async def request_validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+        body = await request.body()
+        logger.warning(
+            "Request validation failed %s %s errors=%s body=%s",
+            request.method,
+            request.url.path,
+            exc.errors(),
+            body.decode("utf-8", errors="replace") if body else "<empty>",
+        )
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={"detail": exc.errors()},
+        )
 
     @app.exception_handler(KeyError)
     async def key_error_handler(request: Request, exc: KeyError) -> JSONResponse:

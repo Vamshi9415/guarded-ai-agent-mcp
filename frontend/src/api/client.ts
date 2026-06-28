@@ -51,14 +51,6 @@ function getApiBaseUrl() {
   return env.env?.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL
 }
 
-function normalizeHeaders(config: AxiosRequestConfig) {
-  return {
-    Accept: 'application/json',
-    'Content-Type': 'application/json',
-    ...config.headers,
-  }
-}
-
 function extractErrorMessage(data: unknown): string | null {
   if (!data || typeof data !== 'object') {
     return null
@@ -144,8 +136,16 @@ export const apiClient: AxiosInstance = axios.create({
 
 apiClient.interceptors.request.use((config) => ({
   ...config,
-  headers: normalizeHeaders(config),
 }))
+
+apiClient.interceptors.request.use((config) => {
+  Object.assign(config.headers, {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+  })
+
+  return config
+})
 
 apiClient.interceptors.response.use(
   (response) => response,

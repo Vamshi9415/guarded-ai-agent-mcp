@@ -196,6 +196,65 @@ class PolicyEngine:
 
         effective_arguments = result.effective_arguments(arguments)
 
+        existing = await self.approvals.find_matching_approval(
+            conversation_id=conversation_id,
+            tool_name=tool_name,
+            arguments=effective_arguments,
+            matched_rule_id=matched_rule.id,
+        )
+
+        if existing is not None:
+            if existing.status is ApprovalStatus.APPROVED:
+                return PolicyDecision(
+                    allowed=True,
+                    outcome=DecisionOutcome.APPROVED,
+                    reason=existing.resolution_reason,
+                    arguments=effective_arguments,
+                    matched_rule_id=matched_rule.id,
+                )
+
+            if existing.status is ApprovalStatus.REJECTED:
+                return PolicyDecision(
+                    allowed=False,
+                    outcome=DecisionOutcome.REJECTED,
+                    reason=existing.resolution_reason or f"rejected by approver ({matched_rule.name})",
+                    matched_rule_id=matched_rule.id,
+                )
+
+            if existing.status is ApprovalStatus.TIMED_OUT:
+                return PolicyDecision(
+                    allowed=False,
+                    outcome=DecisionOutcome.APPROVAL_TIMED_OUT,
+                    reason=existing.resolution_reason or "approval window expired with no response",
+                    matched_rule_id=matched_rule.id,
+                )
+
+            resolved = await self.approvals.wait_for_resolution(existing.id)
+
+            if resolved.status is ApprovalStatus.APPROVED:
+                return PolicyDecision(
+                    allowed=True,
+                    outcome=DecisionOutcome.APPROVED,
+                    reason=resolved.resolution_reason,
+                    arguments=effective_arguments,
+                    matched_rule_id=matched_rule.id,
+                )
+
+            if resolved.status is ApprovalStatus.REJECTED:
+                return PolicyDecision(
+                    allowed=False,
+                    outcome=DecisionOutcome.REJECTED,
+                    reason=resolved.resolution_reason or f"rejected by approver ({matched_rule.name})",
+                    matched_rule_id=matched_rule.id,
+                )
+
+            return PolicyDecision(
+                allowed=False,
+                outcome=DecisionOutcome.APPROVAL_TIMED_OUT,
+                reason=resolved.resolution_reason or "approval window expired with no response",
+                matched_rule_id=matched_rule.id,
+            )
+
         approval = await self.approvals.submit_request(
             conversation_id=conversation_id,
             tool_name=tool_name,

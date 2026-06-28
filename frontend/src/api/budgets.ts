@@ -5,6 +5,40 @@ import type {
   BudgetUpdateRequest,
 } from '../types/budgets';
 
+type ApiBudgetResponse = {
+  conversation_id: string | null;
+  max_tokens: number;
+};
+
+type ApiBudgetStateResponse = {
+  conversation_id: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  last_updated: string;
+};
+
+function toFrontendBudget(budget: ApiBudgetResponse): BudgetResponse {
+  return {
+    conversationid: budget.conversation_id,
+    maxtokens: budget.max_tokens,
+  };
+}
+
+function toFrontendBudgetState(state: ApiBudgetStateResponse): BudgetStateResponse {
+  return {
+    conversationid: state.conversation_id,
+    inputtokens: state.input_tokens,
+    outputtokens: state.output_tokens,
+    totaltokens: state.total_tokens,
+    lastupdated: state.last_updated,
+  };
+}
+
+function toBackendBudget(payload: BudgetUpdateRequest) {
+  return { max_tokens: payload.max_tokens };
+}
+
 // Mock data fallback for when backend is unavailable
 const MOCK_BUDGETS: BudgetResponse[] = [
   { conversationid: 'conv-001', maxtokens: 10000 },
@@ -38,8 +72,8 @@ const MOCK_STATES: Record<string, BudgetStateResponse> = {
 
 export async function listBudgets(): Promise<BudgetResponse[]> {
   try {
-    const response = await apiClient.get<BudgetResponse[]>('/budgets');
-    return response.data;
+    const response = await apiClient.get<ApiBudgetResponse[]>('/budgets');
+    return response.data.map(toFrontendBudget);
   } catch {
     return MOCK_BUDGETS;
   }
@@ -47,8 +81,8 @@ export async function listBudgets(): Promise<BudgetResponse[]> {
 
 export async function getBudget(conversationId: string): Promise<BudgetResponse> {
   try {
-    const response = await apiClient.get<BudgetResponse>(`/budgets/${conversationId}`);
-    return response.data;
+    const response = await apiClient.get<ApiBudgetResponse>(`/budgets/${conversationId}`);
+    return toFrontendBudget(response.data);
   } catch {
     return MOCK_BUDGETS.find(b => b.conversationid === conversationId) ?? { conversationid: conversationId, maxtokens: 10000 };
   }
@@ -56,22 +90,22 @@ export async function getBudget(conversationId: string): Promise<BudgetResponse>
 
 export async function getDefaultBudget(): Promise<BudgetResponse> {
   try {
-    const response = await apiClient.get<BudgetResponse>('/budgets/default');
-    return response.data;
+    const response = await apiClient.get<ApiBudgetResponse>('/budgets/default');
+    return toFrontendBudget(response.data);
   } catch {
     return { conversationid: null, maxtokens: 10000 };
   }
 }
 
 export async function setDefaultBudget(payload: BudgetUpdateRequest): Promise<BudgetResponse> {
-  const response = await apiClient.put<BudgetResponse>('/budgets/default', payload);
-  return response.data;
+  const response = await apiClient.put<ApiBudgetResponse>('/budgets/default', toBackendBudget(payload));
+  return toFrontendBudget(response.data);
 }
 
 export async function updateBudget(conversationId: string, payload: BudgetUpdateRequest): Promise<BudgetResponse> {
   try {
-    const response = await apiClient.put<BudgetResponse>(`/budgets/${conversationId}`, payload);
-    return response.data;
+    const response = await apiClient.put<ApiBudgetResponse>(`/budgets/${conversationId}`, toBackendBudget(payload));
+    return toFrontendBudget(response.data);
   } catch {
     return { conversationid: conversationId, maxtokens: payload.max_tokens };
   }
@@ -79,8 +113,8 @@ export async function updateBudget(conversationId: string, payload: BudgetUpdate
 
 export async function resetBudget(conversationId: string): Promise<BudgetResponse> {
   try {
-    const response = await apiClient.delete<BudgetResponse>(`/budgets/${conversationId}`);
-    return response.data;
+    const response = await apiClient.delete<ApiBudgetResponse>(`/budgets/${conversationId}`);
+    return toFrontendBudget(response.data);
   } catch {
     return { conversationid: conversationId, maxtokens: 10000 };
   }
@@ -96,8 +130,8 @@ export async function getConversationBudget(conversationId: string): Promise<Bud
 
 export async function getConversationBudgetState(conversationId: string): Promise<BudgetStateResponse> {
   try {
-    const response = await apiClient.get<BudgetStateResponse>(`/budgets/${conversationId}/state`);
-    return response.data;
+    const response = await apiClient.get<ApiBudgetStateResponse>(`/budgets/${conversationId}/state`);
+    return toFrontendBudgetState(response.data);
   } catch {
     return MOCK_STATES[conversationId] ?? {
       conversationid: conversationId,

@@ -121,6 +121,19 @@ def test_list_conversations_counts_messages(client: TestClient) -> None:
     assert match["message_count"] == 2
 
 
+def test_get_conversation_messages(client: TestClient) -> None:
+    first = client.post("/api/chat", json={"message": "Hello there"})
+    cid = first.json()["conversation_id"]
+    client.post("/api/chat", json={"conversation_id": cid, "message": "How are you?"})
+
+    response = client.get(f"/api/chat/{cid}/messages")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["conversation_id"] == cid
+    assert body["message_count"] == 2
+    assert [item["role"] for item in body["messages"]] == ["user", "assistant", "user", "assistant"]
+
+
 # ---------------------------------------------------------------------------
 # POST /api/chat/{conversation_id}/reset
 # ---------------------------------------------------------------------------

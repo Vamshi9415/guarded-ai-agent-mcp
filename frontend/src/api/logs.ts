@@ -3,64 +3,64 @@ import type { LogEntry } from '../types/logs';
 
 const MOCK_LOGS: LogEntry[] = [
   {
-    conversationid: 'conv-001',
-    toolname: 'read_file',
+    conversation_id: 'conv-001',
+    tool_name: 'read_file',
     arguments: { path: '/etc/passwd' },
     outcome: 'denied',
     timestamp: new Date(Date.now() - 120000).toISOString(),
-    executiontimems: 12.4,
-    rewrittenarguments: null,
+    execution_time_ms: 12.4,
+    rewritten_arguments: null,
     reason: 'Blocked by rule: Block sensitive file reads',
-    matchedruleid: 'rule-001',
-    enginefailure: false,
+    matched_rule_id: 'rule-001',
+    engine_failure: false,
   },
   {
-    conversationid: 'conv-002',
-    toolname: 'web_search',
+    conversation_id: 'conv-002',
+    tool_name: 'web_search',
     arguments: { query: 'weather today' },
     outcome: 'allowed',
     timestamp: new Date(Date.now() - 300000).toISOString(),
-    executiontimems: 8.1,
-    rewrittenarguments: null,
+    execution_time_ms: 8.1,
+    rewritten_arguments: null,
     reason: null,
-    matchedruleid: null,
-    enginefailure: false,
+    matched_rule_id: null,
+    engine_failure: false,
   },
   {
-    conversationid: 'conv-001',
-    toolname: 'run_shell_command',
+    conversation_id: 'conv-001',
+    tool_name: 'run_shell_command',
     arguments: { command: 'ls -la' },
     outcome: 'requires_approval',
     timestamp: new Date(Date.now() - 60000).toISOString(),
-    executiontimems: 5.3,
-    rewrittenarguments: null,
+    execution_time_ms: 5.3,
+    rewritten_arguments: null,
     reason: 'Requires human approval per policy rule',
-    matchedruleid: 'rule-002',
-    enginefailure: false,
+    matched_rule_id: 'rule-002',
+    engine_failure: false,
   },
   {
-    conversationid: 'conv-003',
-    toolname: 'write_file',
+    conversation_id: 'conv-003',
+    tool_name: 'write_file',
     arguments: { path: '/tmp/output.txt', content: 'hello world' },
     outcome: 'allowed',
     timestamp: new Date(Date.now() - 900000).toISOString(),
-    executiontimems: 15.7,
-    rewrittenarguments: null,
+    execution_time_ms: 15.7,
+    rewritten_arguments: null,
     reason: null,
-    matchedruleid: null,
-    enginefailure: false,
+    matched_rule_id: null,
+    engine_failure: false,
   },
 ];
 
 export async function listLogs(conversationId?: string): Promise<LogEntry[]> {
   try {
     const response = await apiClient.get<LogEntry[]>('/logs', {
-      params: conversationId ? { conversationid: conversationId } : undefined,
+      params: conversationId ? { conversation_id: conversationId } : undefined,
     });
     return response.data;
   } catch {
     if (conversationId) {
-      return MOCK_LOGS.filter(l => l.conversationid === conversationId);
+      return MOCK_LOGS.filter(l => l.conversation_id === conversationId);
     }
     return MOCK_LOGS;
   }

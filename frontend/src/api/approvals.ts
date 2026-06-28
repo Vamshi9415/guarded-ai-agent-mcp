@@ -4,6 +4,60 @@ import type {
   ApprovalRequest,
 } from '../types/approvals';
 
+type ApiApprovalRequest = {
+  id: string;
+  conversation_id: string;
+  tool_name: string;
+  arguments: Record<string, unknown>;
+  matched_rule_id: string;
+  expires_at: string;
+  status: ApprovalRequest['status'];
+  created_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  resolution_reason: string | null;
+};
+
+type ApprovalStatusValue = ApprovalRequest['status'];
+
+function normalizeApprovalStatus(status: string): ApprovalStatusValue {
+  const normalized = status.toLowerCase();
+
+  if (normalized === 'pending' || normalized === 'approved' || normalized === 'rejected' || normalized === 'timedout') {
+    return normalized;
+  }
+
+  return 'pending';
+}
+
+type ApiApprovalDecisionRequest = {
+  resolved_by: string;
+  reason?: string | null;
+};
+
+function toFrontendApproval(approval: ApiApprovalRequest): ApprovalRequest {
+  return {
+    id: approval.id,
+    conversationid: approval.conversation_id,
+    toolname: approval.tool_name,
+    arguments: approval.arguments,
+    matchedruleid: approval.matched_rule_id,
+    expiresat: approval.expires_at,
+    status: normalizeApprovalStatus(approval.status),
+    createdat: approval.created_at,
+    resolvedat: approval.resolved_at,
+    resolvedby: approval.resolved_by,
+    resolutionreason: approval.resolution_reason,
+  };
+}
+
+function toBackendDecision(payload: ApprovalDecisionRequest): ApiApprovalDecisionRequest {
+  return {
+    resolved_by: payload.approver,
+    reason: payload.reason ?? null,
+  };
+}
+
 // Mock data for when backend is unavailable
 const MOCK_APPROVALS: ApprovalRequest[] = [
   {
@@ -38,8 +92,8 @@ let mockApprovals = [...MOCK_APPROVALS];
 
 export async function listPendingApprovals(): Promise<ApprovalRequest[]> {
   try {
-    const response = await apiClient.get<ApprovalRequest[]>('/approvals/pending');
-    return response.data;
+    const response = await apiClient.get<ApiApprovalRequest[]>('/approvals/pending');
+    return response.data.map(toFrontendApproval);
   } catch {
     return mockApprovals.filter(a => a.status === 'pending');
   }
@@ -47,8 +101,8 @@ export async function listPendingApprovals(): Promise<ApprovalRequest[]> {
 
 export async function listAllApprovals(): Promise<ApprovalRequest[]> {
   try {
-    const response = await apiClient.get<ApprovalRequest[]>('/approvals');
-    return response.data;
+    const response = await apiClient.get<ApiApprovalRequest[]>('/approvals');
+    return response.data.map(toFrontendApproval);
   } catch {
     return mockApprovals;
   }
@@ -59,11 +113,11 @@ export async function approveRequest(
   payload: ApprovalDecisionRequest,
 ): Promise<ApprovalRequest> {
   try {
-    const response = await apiClient.post<ApprovalRequest>(
+    const response = await apiClient.post<ApiApprovalRequest>(
       `/approvals/${approvalId}/approve`,
-      payload,
+      toBackendDecision(payload),
     );
-    return response.data;
+    return toFrontendApproval(response.data);
   } catch {
     const idx = mockApprovals.findIndex(a => a.id === approvalId);
     if (idx !== -1) {
@@ -85,11 +139,11 @@ export async function rejectRequest(
   payload: ApprovalDecisionRequest,
 ): Promise<ApprovalRequest> {
   try {
-    const response = await apiClient.post<ApprovalRequest>(
+    const response = await apiClient.post<ApiApprovalRequest>(
       `/approvals/${approvalId}/reject`,
-      payload,
+      toBackendDecision(payload),
     );
-    return response.data;
+    return toFrontendApproval(response.data);
   } catch {
     const idx = mockApprovals.findIndex(a => a.id === approvalId);
     if (idx !== -1) {

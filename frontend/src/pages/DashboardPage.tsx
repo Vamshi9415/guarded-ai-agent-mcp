@@ -3,7 +3,6 @@ import {
   Box,
   Card,
   CardContent,
-  Chip,
   Divider,
   Grid,
   LinearProgress,
@@ -152,7 +151,7 @@ export default function DashboardPage() {
       </Grid>
 
       <Grid container spacing={3}>
-        <Grid item xs={12} lg={7}>
+        <Grid item xs={12}>
           <Card sx={{ height: '100%' }}>
             <CardContent>
               <Stack spacing={2}>
@@ -201,35 +200,6 @@ export default function DashboardPage() {
                     />
                   </ListItem>
                 </List>
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} lg={5}>
-          <Card sx={{ height: '100%' }}>
-            <CardContent>
-              <Stack spacing={2}>
-                <Typography variant="h6" fontWeight={700}>
-                  Suggested next actions
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Use this view as the control-plane overview, then drill into the workflow pages that need attention.
-                </Typography>
-                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                  <Chip label="Review Approvals" color={pendingApprovals > 0 ? 'warning' : 'default'} variant={pendingApprovals > 0 ? 'filled' : 'outlined'} />
-                  <Chip label="Tune Rules" color="primary" variant="outlined" />
-                  <Chip label="Inspect Logs" variant="outlined" />
-                </Stack>
-                <Divider />
-                <Box>
-                  <Typography variant="subtitle2" gutterBottom>
-                    Status guidance
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    If approvals rise above zero, the approvals queue is your first stop. If backend health is not ok, treat this as an operational incident before making policy changes.
-                  </Typography>
-                </Box>
               </Stack>
             </CardContent>
           </Card>

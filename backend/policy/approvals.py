@@ -96,6 +96,32 @@ class ApprovalManager:
         )
         return await self.store.create_approval(request)
 
+    async def find_matching_approval(
+        self,
+        *,
+        conversation_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        matched_rule_id: str,
+    ) -> ApprovalRequest | None:
+        """Returns the newest approval for the same conversation/tool pair.
+
+        This lets the policy engine reuse an existing approval gate instead of
+        creating a new one when the model retries the same tool call.
+        """
+        approvals = await self.store.list_approvals()
+
+        for approval in reversed(approvals):
+            if (
+                approval.conversation_id == conversation_id
+                and approval.tool_name == tool_name
+                and approval.matched_rule_id == matched_rule_id
+                and approval.arguments == arguments
+            ):
+                return approval
+
+        return None
+
     # ------------------------------------------------------------------
     # Waiting
     # ------------------------------------------------------------------

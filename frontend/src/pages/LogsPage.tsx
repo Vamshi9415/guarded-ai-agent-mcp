@@ -50,6 +50,29 @@ function outcomeColor(outcome: string): 'success' | 'warning' | 'error' | 'defau
   }
 }
 
+function csvFieldValue(log: LogEntry, header: string) {
+  switch (header) {
+    case 'timestamp':
+      return log.timestamp
+    case 'conversation_id':
+      return log.conversation_id
+    case 'tool_name':
+      return log.tool_name
+    case 'outcome':
+      return log.outcome
+    case 'execution_time_ms':
+      return log.execution_time_ms
+    case 'reason':
+      return log.reason
+    case 'matched_rule_id':
+      return log.matched_rule_id
+    case 'engine_failure':
+      return log.engine_failure
+    default:
+      return ''
+  }
+}
+
 function ExpandedRow({ log }: { log: LogEntry }) {
   return (
     <Box sx={{ p: 2, bgcolor: 'background.default' }}>
@@ -60,20 +83,20 @@ function ExpandedRow({ log }: { log: LogEntry }) {
             {JSON.stringify(log.arguments, null, 2)}
           </Box>
         </Box>
-        {log.rewrittenarguments && (
+        {log.rewritten_arguments && (
           <Box flex={1}>
             <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={0.5}>Rewritten Arguments</Typography>
             <Box component="pre" sx={{ m: 0, p: 1.5, borderRadius: 1, bgcolor: 'grey.100', fontSize: 12, overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-              {JSON.stringify(log.rewrittenarguments, null, 2)}
+              {JSON.stringify(log.rewritten_arguments, null, 2)}
             </Box>
           </Box>
         )}
         <Box flex={1}>
           <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={0.5}>Meta</Typography>
           <Stack spacing={0.5}>
-            {log.matchedruleid && <Typography variant="caption">Matched Rule: <code>{log.matchedruleid}</code></Typography>}
+            {log.matched_rule_id && <Typography variant="caption">Matched Rule: <code>{log.matched_rule_id}</code></Typography>}
             {log.reason && <Typography variant="caption">Reason: {log.reason}</Typography>}
-            {log.enginefailure && <Chip size="small" label="Engine Failure" color="error" variant="outlined" />}
+            {log.engine_failure && <Chip size="small" label="Engine Failure" color="error" variant="outlined" />}
           </Stack>
         </Box>
       </Stack>
@@ -92,10 +115,10 @@ function LogRow({ log, onCopy }: { log: LogEntry; onCopy: (log: LogEntry) => voi
           </IconButton>
         </TableCell>
         <TableCell><Typography variant="caption">{formatDate(log.timestamp)}</Typography></TableCell>
-        <TableCell><Typography variant="caption" fontFamily="monospace">{log.conversationid}</Typography></TableCell>
-        <TableCell><Typography variant="body2" fontWeight={600}>{log.toolname}</Typography></TableCell>
+        <TableCell><Typography variant="caption" fontFamily="monospace">{log.conversation_id}</Typography></TableCell>
+        <TableCell><Typography variant="body2" fontWeight={600}>{log.tool_name}</Typography></TableCell>
         <TableCell><Chip size="small" label={log.outcome} color={outcomeColor(log.outcome)} /></TableCell>
-        <TableCell><Typography variant="caption">{log.executiontimems.toFixed(1)} ms</Typography></TableCell>
+        <TableCell><Typography variant="caption">{log.execution_time_ms.toFixed(1)} ms</Typography></TableCell>
         <TableCell>
           <Typography variant="caption" color="text.secondary" sx={{ maxWidth: 220, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {log.reason ?? '—'}
@@ -133,13 +156,13 @@ export default function LogsPage() {
     open: false, message: '',
   });
 
-  const toolOptions = useMemo(() => [...new Set(logs.map((log) => log.toolname))], [logs]);
+  const toolOptions = useMemo(() => [...new Set(logs.map((log) => log.tool_name))], [logs]);
 
   const filtered = useMemo(() => {
     let result = logs;
-    if (search) result = result.filter((log) => log.toolname.toLowerCase().includes(search.toLowerCase()) || log.conversationid.toLowerCase().includes(search.toLowerCase()) || (log.reason ?? '').toLowerCase().includes(search.toLowerCase()));
+    if (search) result = result.filter((log) => log.tool_name.toLowerCase().includes(search.toLowerCase()) || log.conversation_id.toLowerCase().includes(search.toLowerCase()) || (log.reason ?? '').toLowerCase().includes(search.toLowerCase()));
     if (filterOutcome) result = result.filter((log) => log.outcome === filterOutcome);
-    if (filterTool) result = result.filter((log) => log.toolname === filterTool);
+    if (filterTool) result = result.filter((log) => log.tool_name === filterTool);
     if (dateFrom) result = result.filter((log) => new Date(log.timestamp) >= new Date(dateFrom));
     if (dateTo) result = result.filter((log) => new Date(log.timestamp) <= new Date(dateTo + 'T23:59:59'));
     return [...result].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -155,9 +178,9 @@ export default function LogsPage() {
   }, []);
 
   function exportCsv() {
-    const headers = ['timestamp', 'conversationid', 'toolname', 'outcome', 'executiontimems', 'reason', 'matchedruleid', 'enginefailure'];
+    const headers = ['timestamp', 'conversation_id', 'tool_name', 'outcome', 'execution_time_ms', 'reason', 'matched_rule_id', 'engine_failure'];
     const rows = filtered.map((log) => headers.map((header) => {
-      const value = (log as Record<string, unknown>)[header];
+      const value = csvFieldValue(log, header);
       if (value === null || value === undefined) return '';
       const stringValue = String(value);
       return stringValue.includes(',') ? `"${stringValue}"` : stringValue;
@@ -269,7 +292,7 @@ export default function LogsPage() {
               </TableHead>
               <TableBody>
                 {paginated.map((log, index) => (
-                  <LogRow key={`${log.timestamp}-${log.conversationid}-${log.toolname}-${index}`} log={log} onCopy={handleCopy} />
+                  <LogRow key={`${log.timestamp}-${log.conversation_id}-${log.tool_name}-${index}`} log={log} onCopy={handleCopy} />
                 ))}
               </TableBody>
             </Table>

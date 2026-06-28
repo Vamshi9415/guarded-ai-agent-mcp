@@ -6,6 +6,7 @@ import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 
 const drawerWidth = 280
+const topBarHeight = 64
 
 export default function AppLayout() {
   const theme = useTheme()
@@ -16,22 +17,28 @@ export default function AppLayout() {
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       <TopBar backendStatusLabel="Backend status: placeholder" />
 
-      <Box sx={{ display: 'flex', minHeight: 'calc(100vh - 64px)' }}>
-        <Box component="nav" aria-label="primary navigation">
+      <Box sx={{ display: 'flex', minHeight: `calc(100vh - ${topBarHeight}px)` }}>
+        <Box
+          component="nav"
+          aria-label="primary navigation"
+          sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}
+        >
           <Drawer
             variant={isDesktop ? 'permanent' : 'temporary'}
             open={isDesktop || mobileOpen}
             onClose={() => setMobileOpen(false)}
             ModalProps={{ keepMounted: true }}
+            anchor="left"
             sx={{
               width: drawerWidth,
-              flexShrink: 0,
               '& .MuiDrawer-paper': {
                 width: drawerWidth,
                 boxSizing: 'border-box',
                 borderRight: 1,
                 borderColor: 'divider',
                 bgcolor: 'background.paper',
+                top: { md: `${topBarHeight}px` },
+                height: { md: `calc(100vh - ${topBarHeight}px)` },
               },
             }}
           >
@@ -39,8 +46,14 @@ export default function AppLayout() {
           </Drawer>
         </Box>
 
-        <Box component="main" sx={{ flexGrow: 1, minWidth: 0 }}>
-          <Toolbar />
+        <Box
+          component="main"
+          sx={{
+            flexGrow: 1,
+            minWidth: 0,
+            width: { xs: '100%', md: `calc(100% - ${drawerWidth}px)` },
+          }}
+        >
           <Box sx={{ p: { xs: 2, sm: 3, lg: 4 } }}>
             <Outlet />
           </Box>

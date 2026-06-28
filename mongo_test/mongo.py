@@ -1,49 +1,34 @@
-import os
-
 from dotenv import load_dotenv
-from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 
-# Load environment variables
+from backend.policy.mongo_connection import MongoSettings, create_mongo_client
+
+
 load_dotenv()
 
-MONGO_USER = os.getenv("MONGO_USER")
-MONGO_PASS = os.getenv("MONGO_PASS")
-MONGO_HOST_URI = os.getenv("MONGO_HOST_URI")
-MONGO_DB_NAME = os.getenv("MONGO_DB_NAME")
-MONGO_APP_NAME = os.getenv("MONGO_APP_NAME")
-
-print("User:", MONGO_USER)
-print("Host:", MONGO_HOST_URI)
-print("DB:", MONGO_DB_NAME)
-print("Password loaded:", bool(MONGO_PASS))
-
-# Build MongoDB URI
-MONGO_URI = (
-    f"mongodb+srv://{MONGO_USER}:{MONGO_PASS}"
-    f"@{MONGO_HOST_URI}/"
-    f"?retryWrites=true&w=majority&appName={MONGO_APP_NAME}"
-)
-print(
-    f"mongodb+srv://{MONGO_USER}:******@{MONGO_HOST_URI}/?retryWrites=true&w=majority&appName={MONGO_APP_NAME}"
-)
 try:
     print("Connecting to MongoDB Atlas...")
 
-    client = MongoClient(
-        MONGO_URI,
-        serverSelectionTimeoutMS=5000,
+    settings = MongoSettings.from_env()
+    print("User:", settings.user)
+    print("Host:", settings.host_uri)
+    print("DB:", settings.db_name)
+    print("Password loaded:", bool(settings.password))
+    print(
+        f"mongodb+srv://{settings.user}:******@{settings.host_uri}/?retryWrites=true&w=majority&appName={settings.app_name}"
     )
+
+    client = create_mongo_client()
 
     # Verify connection
     client.admin.command("ping")
     print("✅ Successfully connected to MongoDB Atlas!")
 
-    db = client[MONGO_DB_NAME]
+    db = client[settings.db_name]
 
     collections = db.list_collection_names()
 
-    print(f"\nDatabase: {MONGO_DB_NAME}")
+    print(f"\nDatabase: {settings.db_name}")
     print(f"Collections ({len(collections)}):")
 
     if collections:

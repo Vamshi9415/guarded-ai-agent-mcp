@@ -32,6 +32,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from backend.agent.agent_manager import AgentManager
+from backend.agent.chat_store import MongoChatStore
 from backend.agent.tool_loop import ToolLoop
 from backend.llm.gemini import GeminiClient
 from backend.mcp.manager import MCPManager
@@ -40,7 +41,8 @@ from backend.mcp.transport.stdio_transport import StdioTransport
 from backend.mcp.transport.streamble_http_transport import StreamableHTTPTransport
 from backend.policy.approvals import ApprovalManager
 from backend.policy.engine import PolicyEngine
-from backend.policy.store import InMemoryPolicyStore, PolicyStore
+from backend.policy.mongo_store import MongoPolicyStore
+from backend.policy.store import PolicyStore
 
 logger = logging.getLogger(__name__)
 
@@ -53,14 +55,23 @@ _MCP_SERVER_PATH = Path(__file__).parent.parent / "mcp" / "server.py"
 # ---------------------------------------------------------------------------
 
 @lru_cache(maxsize=1)
+def get_mongo_policy_store() -> MongoPolicyStore:
+    """Returns the shared MongoDB-backed policy store instance."""
+    return MongoPolicyStore()
+
+
+@lru_cache(maxsize=1)
+def get_mongo_chat_store() -> MongoChatStore:
+    """Returns the shared MongoDB-backed chat store instance."""
+    return MongoChatStore()
+
+
 def get_policy_store() -> PolicyStore:
     """Returns the shared policy store instance for the API process.
 
-    The in-memory store is intentionally process-local for now, but this
-    provider shape allows a database-backed PolicyStore implementation to
-    replace it later without changing router code.
+    The API is backed by MongoDB so policy data survives process restarts.
     """
-    return InMemoryPolicyStore()
+    return get_mongo_policy_store()
 
 
 @lru_cache(maxsize=1)
@@ -150,7 +161,7 @@ def get_agent_manager() -> AgentManager:
     registry of active Agent instances, each with its own conversation history,
     all sharing the single ToolLoop returned by get_tool_loop().
     """
-    return AgentManager(tool_loop=get_tool_loop)
+    return AgentManager(tool_loop=get_tool_loop, chat_store=get_mongo_chat_store())
 
 
 # ---------------------------------------------------------------------------
@@ -165,6 +176,11 @@ async def startup() -> None:
     """
     manager = get_mcp_manager()
     await manager.connect_all()
+
+    # Initialize the Mongo-backed policy store eagerly so startup fails fast
+    # if the database is unavailable or credentials are invalid.
+    get_policy_store()
+    get_mongo_chat_store()
 
     registry = get_tool_registry()
     await registry.discover()
@@ -184,6 +200,10 @@ async def shutdown() -> None:
     await get_mcp_manager().disconnect_all()
     if get_llm_client.cache_info().currsize:
         await get_llm_client().close()
+    if get_mongo_policy_store.cache_info().currsize:
+        get_mongo_policy_store().close()
+    if get_mongo_chat_store.cache_info().currsize:
+        get_mongo_chat_store().close()
     logger.info("MCP and LLM client shut down cleanly.")
 
 

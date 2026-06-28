@@ -41,6 +41,13 @@ def test_health_includes_version(client: TestClient) -> None:
     assert response.json()["version"] == "0.1.0"
 
 
+def test_health_reports_mongo_storage(client: TestClient) -> None:
+    response = client.get("/health")
+    body = response.json()
+    assert body["storage_backend"] == "mongo"
+    assert body["storage_ready"] is True
+
+
 def test_health_rule_count_reflects_created_rules(client: TestClient) -> None:
     """Rule count in /health must reflect real store state."""
     before = client.get("/health").json()["rules"]

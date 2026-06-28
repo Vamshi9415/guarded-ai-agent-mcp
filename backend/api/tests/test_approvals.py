@@ -33,12 +33,28 @@ def test_list_pending_empty(client: TestClient) -> None:
     assert response.json() == []
 
 
+def test_list_all_empty(client: TestClient) -> None:
+    response = client.get("/api/approvals")
+    assert response.status_code == 200
+    assert response.json() == []
+
+
 def test_list_pending_after_submit(
     client: TestClient,
     store: InMemoryPolicyStore,
 ) -> None:
     _submit_approval(store)
     response = client.get("/api/approvals/pending")
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+
+
+def test_list_all_after_submit(
+    client: TestClient,
+    store: InMemoryPolicyStore,
+) -> None:
+    _submit_approval(store)
+    response = client.get("/api/approvals")
     assert response.status_code == 200
     assert len(response.json()) == 1
 

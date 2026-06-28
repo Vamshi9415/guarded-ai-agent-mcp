@@ -17,6 +17,7 @@ from backend.api.routers.budgets import router as budgets_router
 from backend.api.routers.chat import router as chat_router
 from backend.api.routers.logs import router as logs_router
 from backend.api.routers.rules import router as rules_router
+from backend.api.routers.tools import router as tools_router
 from backend.api.schemas import HealthResponse
 
 logger = logging.getLogger(__name__)
@@ -92,6 +93,19 @@ def create_app() -> FastAPI:
             rules=len(await store.list_rules()),
             pending_approvals=len(await store.list_pending_approvals()),
             version=APP_VERSION,
+            storage_backend="mongo",
+            storage_ready=True,
+        )
+
+    @app.get("/health", response_model=HealthResponse, tags=["Meta"])
+    async def legacy_health(store=Depends(get_policy_store)) -> HealthResponse:
+        return HealthResponse(
+            status="ok",
+            rules=len(await store.list_rules()),
+            pending_approvals=len(await store.list_pending_approvals()),
+            version=APP_VERSION,
+            storage_backend="mongo",
+            storage_ready=True,
         )
 
     # ------------------------------------------------------------------
@@ -103,6 +117,7 @@ def create_app() -> FastAPI:
     app.include_router(budgets_router, prefix="/api")
     app.include_router(logs_router, prefix="/api")
     app.include_router(chat_router, prefix="/api")
+    app.include_router(tools_router, prefix="/api")
 
     return app
 
