@@ -87,7 +87,7 @@ function LogRow({ log, onCopy }: { log: LogEntry; onCopy: (log: LogEntry) => voi
     <>
       <TableRow hover sx={{ '& > *': { borderBottom: expanded ? 'unset' : undefined } }}>
         <TableCell padding="checkbox">
-          <IconButton size="small" onClick={() => setExpanded(e => !e)}>
+          <IconButton size="small" onClick={() => setExpanded((value) => !value)}>
             {expanded ? <KeyboardArrowUpIcon fontSize="small" /> : <KeyboardArrowDownIcon fontSize="small" />}
           </IconButton>
         </TableCell>
@@ -133,15 +133,15 @@ export default function LogsPage() {
     open: false, message: '',
   });
 
-  const toolOptions = useMemo(() => [...new Set(logs.map(l => l.toolname))], [logs]);
+  const toolOptions = useMemo(() => [...new Set(logs.map((log) => log.toolname))], [logs]);
 
   const filtered = useMemo(() => {
     let result = logs;
-    if (search) result = result.filter(l => l.toolname.toLowerCase().includes(search.toLowerCase()) || l.conversationid.toLowerCase().includes(search.toLowerCase()) || (l.reason ?? '').toLowerCase().includes(search.toLowerCase()));
-    if (filterOutcome) result = result.filter(l => l.outcome === filterOutcome);
-    if (filterTool) result = result.filter(l => l.toolname === filterTool);
-    if (dateFrom) result = result.filter(l => new Date(l.timestamp) >= new Date(dateFrom));
-    if (dateTo) result = result.filter(l => new Date(l.timestamp) <= new Date(dateTo + 'T23:59:59'));
+    if (search) result = result.filter((log) => log.toolname.toLowerCase().includes(search.toLowerCase()) || log.conversationid.toLowerCase().includes(search.toLowerCase()) || (log.reason ?? '').toLowerCase().includes(search.toLowerCase()));
+    if (filterOutcome) result = result.filter((log) => log.outcome === filterOutcome);
+    if (filterTool) result = result.filter((log) => log.toolname === filterTool);
+    if (dateFrom) result = result.filter((log) => new Date(log.timestamp) >= new Date(dateFrom));
+    if (dateTo) result = result.filter((log) => new Date(log.timestamp) <= new Date(dateTo + 'T23:59:59'));
     return [...result].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }, [logs, search, filterOutcome, filterTool, dateFrom, dateTo]);
 
@@ -156,18 +156,18 @@ export default function LogsPage() {
 
   function exportCsv() {
     const headers = ['timestamp', 'conversationid', 'toolname', 'outcome', 'executiontimems', 'reason', 'matchedruleid', 'enginefailure'];
-    const rows = filtered.map(l => headers.map(h => {
-      const v = (l as Record<string, unknown>)[h];
-      if (v === null || v === undefined) return '';
-      const s = String(v);
-      return s.includes(',') ? `"${s}"` : s;
+    const rows = filtered.map((log) => headers.map((header) => {
+      const value = (log as Record<string, unknown>)[header];
+      if (value === null || value === undefined) return '';
+      const stringValue = String(value);
+      return stringValue.includes(',') ? `"${stringValue}"` : stringValue;
     }).join(','));
     const csv = [headers.join(','), ...rows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `armoriq-logs-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
+    const anchor = document.createElement('a');
+    anchor.href = URL.createObjectURL(blob);
+    anchor.download = `armoriq-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
   }
 
   return (
@@ -180,7 +180,7 @@ export default function LogsPage() {
         <Stack direction="row" spacing={1}>
           <Button variant="outlined" startIcon={<DownloadIcon />} onClick={exportCsv} disabled={filtered.length === 0}>Export CSV</Button>
           <Button variant="outlined" startIcon={<RefreshIcon />} onClick={() => refetch()} disabled={isFetching}>
-            {isFetching ? 'Refreshing…' : 'Refresh'}
+            {isFetching ? 'Refreshing…' : 'Refresh · auto 30s'}
           </Button>
         </Stack>
       </Stack>
@@ -189,17 +189,21 @@ export default function LogsPage() {
         <Alert severity="error">{error instanceof Error ? error.message : 'Failed to load logs.'}</Alert>
       )}
 
-      {/* Filters */}
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="flex-start" flexWrap="wrap">
         <TextField
-          size="small" placeholder="Search logs…" value={search}
-          onChange={e => { setSearch(e.target.value); setPage(0); }}
+          size="small"
+          placeholder="Search logs…"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(0);
+          }}
           InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
           sx={{ minWidth: 220 }}
         />
         <FormControl size="small" sx={{ minWidth: 150 }}>
           <InputLabel>Outcome</InputLabel>
-          <Select value={filterOutcome} label="Outcome" onChange={e => { setFilterOutcome(e.target.value); setPage(0); }}>
+          <Select value={filterOutcome} label="Outcome" onChange={(e) => { setFilterOutcome(e.target.value); setPage(0); }}>
             <MenuItem value="">All</MenuItem>
             <MenuItem value="allowed">Allowed</MenuItem>
             <MenuItem value="denied">Denied</MenuItem>
@@ -208,8 +212,91 @@ export default function LogsPage() {
         </FormControl>
         <FormControl size="small" sx={{ minWidth: 150 }}>
           <InputLabel>Tool</InputLabel>
-          <Select value={filterTool} label="Tool" onChange={e => { setFilterTool(e.target.value); setPage(0); }}>
+          <Select value={filterTool} label="Tool" onChange={(e) => { setFilterTool(e.target.value); setPage(0); }}>
             <MenuItem value="">All tools</MenuItem>
-            {toolOptions.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+            {toolOptions.map((tool) => <MenuItem key={tool} value={tool}>{tool}</MenuItem>)}
           </Select>
-        
+        </FormControl>
+        <TextField
+          size="small"
+          label="From"
+          type="date"
+          value={dateFrom}
+          onChange={(e) => {
+            setDateFrom(e.target.value);
+            setPage(0);
+          }}
+          InputLabelProps={{ shrink: true }}
+        />
+        <TextField
+          size="small"
+          label="To"
+          type="date"
+          value={dateTo}
+          onChange={(e) => {
+            setDateTo(e.target.value);
+            setPage(0);
+          }}
+          InputLabelProps={{ shrink: true }}
+        />
+      </Stack>
+
+      {isLoading ? (
+        <Stack spacing={1}>
+          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} variant="rectangular" height={54} sx={{ borderRadius: 1 }} />)}
+        </Stack>
+      ) : filtered.length === 0 ? (
+        <Paper variant="outlined" sx={{ p: 6, textAlign: 'center' }}>
+          <ReceiptLongIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 2 }} />
+          <Typography variant="h6" gutterBottom>No logs found</Typography>
+          <Typography variant="body2" color="text.secondary">Audit records will appear here as tools are executed.</Typography>
+        </Paper>
+      ) : (
+        <Paper variant="outlined">
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell />
+                  <TableCell>Timestamp</TableCell>
+                  <TableCell>Conversation</TableCell>
+                  <TableCell>Tool</TableCell>
+                  <TableCell>Result</TableCell>
+                  <TableCell>Duration</TableCell>
+                  <TableCell>Reason</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {paginated.map((log, index) => (
+                  <LogRow key={`${log.timestamp}-${log.conversationid}-${log.toolname}-${index}`} log={log} onCopy={handleCopy} />
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          <TablePagination
+            component="div"
+            count={filtered.length}
+            page={page}
+            rowsPerPage={rowsPerPage}
+            onPageChange={(_, nextPage) => setPage(nextPage)}
+            onRowsPerPageChange={(e) => {
+              setRowsPerPage(parseInt(e.target.value, 10));
+              setPage(0);
+            }}
+            rowsPerPageOptions={[10, 25, 50]}
+          />
+        </Paper>
+      )}
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={3000}
+        onClose={() => setSnackbar((state) => ({ ...state, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert severity="success" onClose={() => setSnackbar((state) => ({ ...state, open: false }))}>{snackbar.message}</Alert>
+      </Snackbar>
+    </Stack>
+  );
+}
