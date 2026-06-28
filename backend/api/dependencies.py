@@ -119,6 +119,20 @@ def get_mcp_manager() -> MCPManager:
             args=[str(_MCP_SERVER_PATH)],
         )
     )
+    # CRITICAL FIX: Skip local-crud StdioTransport on Vercel to prevent serverless function timeouts
+    if not os.getenv("VERCEL"):
+        logger.info("Registering local-crud MCP transport.")
+        manager.register(
+            StdioTransport(
+                name="local-crud",
+                command=sys.executable,
+                args=[str(_MCP_SERVER_PATH)],
+            )
+        )
+    else:
+        logger.warning("Running on Vercel: Skipped local-crud StdioTransport to prevent subprocess hang.")
+        
+        
     context7_key = os.getenv("CONTEXT7_API_KEY")
     if context7_key:
         manager.register(
