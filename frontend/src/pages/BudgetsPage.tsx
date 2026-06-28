@@ -37,10 +37,6 @@ import SearchIcon from '@mui/icons-material/Search';
 import { useBudgets, useUpdateBudget, useResetBudget } from '../hooks/useBudgets';
 import type { BudgetResponse } from '../types/budgets';
 
-function formatDate(iso: string) {
-  try { return new Date(iso).toLocaleString(); } catch { return iso; }
-}
-
 function UsageBar({ used, max }: { used: number; max: number }) {
   const pct = max > 0 ? Math.min((used / max) * 100, 100) : 0;
   const color = pct >= 80 ? 'error' : pct >= 50 ? 'warning' : 'primary';
@@ -53,6 +49,12 @@ function UsageBar({ used, max }: { used: number; max: number }) {
       <LinearProgress variant="determinate" value={pct} color={color} sx={{ height: 6, borderRadius: 3 }} />
     </Box>
   );
+}
+
+function getStableMockUsage(conversationId: string, maxTokens: number) {
+  const hash = conversationId.split('').reduce((acc, char, index) => acc + char.charCodeAt(0) * (index + 1), 0);
+  const ratio = ((hash % 55) + 25) / 100;
+  return Math.min(Math.floor(maxTokens * ratio), maxTokens);
 }
 
 export default function BudgetsPage() {
@@ -75,24 +77,23 @@ export default function BudgetsPage() {
   const notify = (message: string, severity: 'success' | 'error') =>
     setSnackbar({ open: true, message, severity });
 
-  // Mock state for token usage (since state endpoint is per-conversation)
   const mockUsage: Record<string, number> = useMemo(() => {
     const result: Record<string, number> = {};
-    budgets.forEach(b => {
-      if (b.conversationid) {
-        result[b.conversationid] = Math.floor(Math.random() * b.maxtokens);
+    budgets.forEach((budget) => {
+      if (budget.conversationid) {
+        result[budget.conversationid] = getStableMockUsage(budget.conversationid, budget.maxtokens);
       }
     });
     return result;
   }, [budgets]);
 
-  const totalBudget = budgets.reduce((s, b) => s + b.maxtokens, 0);
-  const totalUsed = Object.values(mockUsage).reduce((s, v) => s + v, 0);
+  const totalBudget = budgets.reduce((sum, budget) => sum + budget.maxtokens, 0);
+  const totalUsed = Object.values(mockUsage).reduce((sum, value) => sum + value, 0);
   const remaining = totalBudget - totalUsed;
 
   const filtered = useMemo(() => {
     if (!search) return budgets;
-    return budgets.filter(b => b.conversationid?.toLowerCase().includes(search.toLowerCase()));
+    return budgets.filter((budget) => budget.conversationid?.toLowerCase().includes(search.toLowerCase()));
   }, [budgets, search]);
 
   const paginated = filtered.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
@@ -100,9 +101,15 @@ export default function BudgetsPage() {
   async function handleEditSave() {
     if (!editTarget?.conversationid) return;
     const maxTokens = parseInt(newMax, 10);
-    if (!maxTokens || maxTokens <= 0) { notify('Enter a valid token limit.', 'error'); return; }
+    if (!maxTokens || maxTokens <= 0) {
+      notify('Enter a valid token limit.', 'error');
+      return;
+    }
     try {
-      await updateBudget.mutateAsync({ conversationId: editTarget.conversationid, payload: { max_tokens: maxTokens } });
+      await updateBudget.mutateAsync({
+        conversationId: editTarget.conversationid,
+        payload: { max_tokens: maxTokens },
+      });
       notify('Budget updated.', 'success');
       setEditOpen(false);
     } catch (e) {
@@ -110,9 +117,9 @@ export default function BudgetsPage() {
     }
   }
 
-  async function handleReset(convId: string) {
+  async function handleReset(conversationId: string) {
     try {
-      await resetBudget.mutateAsync(convId);
+      await resetBudget.mutateAsync(conversationId);
       notify('Budget reset to default.', 'success');
     } catch (e) {
       notify(e instanceof Error ? e.message : 'Reset failed.', 'error');
@@ -130,7 +137,6 @@ export default function BudgetsPage() {
         <Alert severity="error">{error instanceof Error ? error.message : 'Failed to load budgets.'}</Alert>
       )}
 
-      {/* KPI Cards */}
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6} lg={3}>
           <Card>
@@ -190,10 +196,14 @@ export default function BudgetsPage() {
         </Grid>
       </Grid>
 
-      {/* Search */}
       <TextField
-        size="small" placeholder="Search by conversation ID…" value={search}
-        onChange={e => { setSearch(e.target.value); setPage(0); }}
+        size="small"
+        placeholder="Search by conversation ID…"
+        value={search}
+        onChange={(e) => {
+          setSearch(e.target.value);
+          setPage(0);
+        }}
         InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
         sx={{ maxWidth: 320 }}
       />
@@ -222,29 +232,47 @@ export default function BudgetsPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {paginated.map(b => {
-                  const convId = b.conversationid ?? 'default';
-                  const used = mockUsage[b.conversationid ?? ''] ?? 0;
-                  const remaining = b.maxtokens - used;
+                {paginated.map((budget) => {
+                  const conversationId = budget.conversationid ?? 'default';
+                  const used = mockUsage[budget.conversationid ?? ''] ?? 0;
+                  const rowRemaining = budget.maxtokens - used;
                   return (
-                    <TableRow key={convId} hover>
-                      <TableCell><Typography variant="body2" fontFamily="monospace">{convId}</Typography></TableCell>
-                      <TableCell><Typography variant="body2">{b.maxtokens.toLocaleString()} tokens</Typography></TableCell>
-                      <TableCell><UsageBar used={used} max={b.maxtokens} /></TableCell>
+                    <TableRow key={conversationId} hover>
+                      <TableCell><Typography variant="body2" fontFamily="monospace">{conversationId}</Typography></TableCell>
+                      <TableCell><Typography variant="body2">{budget.maxtokens.toLocaleString()} tokens</Typography></TableCell>
+                      <TableCell><UsageBar used={used} max={budget.maxtokens} /></TableCell>
                       <TableCell>
-                        <Typography variant="body2" color={remaining < b.maxtokens * 0.2 ? 'error.main' : 'inherit'}>
-                          {remaining.toLocaleString()}
+                        <Typography variant="body2" color={rowRemaining < budget.maxtokens * 0.2 ? 'error.main' : 'inherit'}>
+                          {rowRemaining.toLocaleString()}
                         </Typography>
                       </TableCell>
                       <TableCell align="right">
                         <Stack direction="row" justifyContent="flex-end" spacing={0.5}>
-                          {b.conversationid && (
+                          {budget.conversationid && (
                             <>
                               <Tooltip title="Edit Budget">
-                                <Button size="small" startIcon={<EditIcon />} onClick={() => { setEditTarget(b); setNewMax(String(b.maxtokens)); setEditOpen(true); }}>Edit</Button>
+                                <Button
+                                  size="small"
+                                  startIcon={<EditIcon />}
+                                  onClick={() => {
+                                    setEditTarget(budget);
+                                    setNewMax(String(budget.maxtokens));
+                                    setEditOpen(true);
+                                  }}
+                                >
+                                  Edit
+                                </Button>
                               </Tooltip>
                               <Tooltip title="Reset to Default">
-                                <Button size="small" color="warning" startIcon={<RefreshIcon />} onClick={() => handleReset(b.conversationid!)} disabled={resetBudget.isPending}>Reset</Button>
+                                <Button
+                                  size="small"
+                                  color="warning"
+                                  startIcon={<RefreshIcon />}
+                                  onClick={() => handleReset(budget.conversationid!)}
+                                  disabled={resetBudget.isPending}
+                                >
+                                  Reset
+                                </Button>
                               </Tooltip>
                             </>
                           )}
@@ -257,22 +285,31 @@ export default function BudgetsPage() {
             </Table>
           </TableContainer>
           <TablePagination
-            component="div" count={filtered.length} page={page} rowsPerPage={rowsPerPage}
-            onPageChange={(_, p) => setPage(p)}
-            onRowsPerPageChange={e => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
+            component="div"
+            count={filtered.length}
+            page={page}
+            rowsPerPage={rowsPerPage}
+            onPageChange={(_, nextPage) => setPage(nextPage)}
+            onRowsPerPageChange={(e) => {
+              setRowsPerPage(parseInt(e.target.value, 10));
+              setPage(0);
+            }}
             rowsPerPageOptions={[5, 10, 25]}
           />
         </Paper>
       )}
 
-      {/* Edit Dialog */}
       <Dialog open={editOpen} onClose={() => setEditOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle>Edit Budget — {editTarget?.conversationid}</DialogTitle>
         <DialogContent>
           <TextField
-            label="Max Tokens" type="number" value={newMax}
-            onChange={e => setNewMax(e.target.value)}
-            fullWidth sx={{ mt: 1 }} inputProps={{ min: 1 }}
+            label="Max Tokens"
+            type="number"
+            value={newMax}
+            onChange={(e) => setNewMax(e.target.value)}
+            fullWidth
+            sx={{ mt: 1 }}
+            inputProps={{ min: 1 }}
           />
         </DialogContent>
         <DialogActions>
@@ -283,9 +320,13 @@ export default function BudgetsPage() {
         </DialogActions>
       </Dialog>
 
-      <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(s => ({ ...s, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
-        <Alert severity={snackbar.severity} onClose={() => setSnackbar(s => ({ ...s, open: false }))}>{snackbar.message}</Alert>
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar((state) => ({ ...state, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert severity={snackbar.severity} onClose={() => setSnackbar((state) => ({ ...state, open: false }))}>{snackbar.message}</Alert>
       </Snackbar>
     </Stack>
   );
