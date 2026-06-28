@@ -1,10 +1,8 @@
-import type { ApiDateTimeString, ApiId, ApiStatus } from './common'
-
 export type ApprovalStatus =
-  | "pending"
-  | "approved"
-  | "rejected"
-  | "timedout";
+  | 'pending'
+  | 'approved'
+  | 'rejected'
+  | 'timedout';
 
 export interface ApprovalRequest {
   id: string;

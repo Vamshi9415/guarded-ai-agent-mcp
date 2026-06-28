@@ -1,17 +1,17 @@
-export type RuleAction = "allow" | "block" | "require_approval";
-export type RuleType = "exact" | "glob" | "regex";
-export type RuleScope = "global" | "conversation";
+export type RuleAction = 'allow' | 'block' | 'require_approval';
+export type RuleType = 'exact' | 'glob' | 'regex';
+export type RuleScope = 'global' | 'conversation';
 export type ConstraintType =
-  | "equals"
-  | "not_equals"
-  | "contains"
-  | "not_contains"
-  | "starts_with"
-  | "ends_with"
-  | "regex"
-  | "in"
-  | "not_in"
-  | "path_prefix";
+  | 'equals'
+  | 'not_equals'
+  | 'contains'
+  | 'not_contains'
+  | 'starts_with'
+  | 'ends_with'
+  | 'regex'
+  | 'in'
+  | 'not_in'
+  | 'path_prefix';
 
 export interface ArgumentConstraintPayload {
   field: string;
@@ -37,7 +37,9 @@ export interface RuleCreateRequest {
   scopeid: string | null;
 }
 
+export type RuleCreate = RuleCreateRequest;
 export interface RuleUpdateRequest extends RuleCreateRequest {}
+export type RuleUpdate = RuleUpdateRequest;
 
 export interface RuleResponse {
   id: string;
