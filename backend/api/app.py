@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 
 APP_VERSION = "0.1.0"
 
+from dotenv import load_dotenv
+
+load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -82,7 +85,7 @@ def create_app() -> FastAPI:
             "health": "/health",
         }
 
-    @app.get("/health", response_model=HealthResponse, tags=["Meta"])
+    @app.get("/api/health", response_model=HealthResponse, tags=["Meta"])
     async def health(store=Depends(get_policy_store)) -> HealthResponse:
         return HealthResponse(
             status="ok",

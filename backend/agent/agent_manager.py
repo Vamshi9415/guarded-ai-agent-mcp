@@ -42,6 +42,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from collections.abc import Callable
 from typing import Iterator
 
 from backend.agent.agent import Agent
@@ -88,7 +89,7 @@ class AgentManager:
             this same ToolLoop.
     """
 
-    def __init__(self, tool_loop: ToolLoop) -> None:
+    def __init__(self, tool_loop: ToolLoop | Callable[[], ToolLoop]) -> None:
         self._tool_loop = tool_loop
         # Keyed by conversation_id — insertion-ordered in Python 3.7+.
         self._agents: dict[str, Agent] = {}
@@ -118,7 +119,7 @@ class AgentManager:
             logger.debug("create() called for existing conversation %s — returning existing agent", conversation_id)
             return self._agents[conversation_id]
 
-        agent = Agent(tool_loop=self._tool_loop, conversation_id=conversation_id)
+        agent = Agent(tool_loop=self._resolve_tool_loop(), conversation_id=conversation_id)
         cid = agent.conversation_id   # read back in case Agent generated it
 
         self._agents[cid] = agent
@@ -216,10 +217,18 @@ class AgentManager:
     # Internal
     # ------------------------------------------------------------------
 
+    def _resolve_tool_loop(self) -> ToolLoop:
+        if hasattr(self._tool_loop, "run"):
+            return self._tool_loop
+        return self._tool_loop()
+    
     def __len__(self) -> int:
         return len(self._agents)
 
     def __iter__(self) -> Iterator[str]:
         return iter(self._agents)
+
+
+
 
 

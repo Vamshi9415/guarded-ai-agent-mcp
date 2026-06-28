@@ -150,7 +150,7 @@ def get_agent_manager() -> AgentManager:
     registry of active Agent instances, each with its own conversation history,
     all sharing the single ToolLoop returned by get_tool_loop().
     """
-    return AgentManager(tool_loop=get_tool_loop())
+    return AgentManager(tool_loop=get_tool_loop)
 
 
 # ---------------------------------------------------------------------------
@@ -185,4 +185,5 @@ async def shutdown() -> None:
     if get_llm_client.cache_info().currsize:
         await get_llm_client().close()
     logger.info("MCP and LLM client shut down cleanly.")
+
 

@@ -34,7 +34,7 @@ from __future__ import annotations
 import logging
 import time
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from backend.agent.agent_manager import AgentManager
 from backend.api.dependencies import get_agent_manager
@@ -63,7 +63,15 @@ async def chat(
     If ``conversation_id`` is provided but not found, the global KeyError
     handler returns HTTP 404 — no local try/except needed here.
     """
-    agent = manager.get_or_create(payload.conversation_id)
+    try:
+        agent = manager.get_or_create(payload.conversation_id)
+    except ValueError as exc:
+        if "No Gemini API keys found" in str(exc):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=str(exc),
+            ) from exc
+        raise
     cid = agent.conversation_id
 
     logger.info(

@@ -1,0 +1,6 @@
+export { default as ApprovalsPage } from './ApprovalsPage'
+export { default as BudgetsPage } from './BudgetsPage'
+export { default as ChatPage } from './ChatPage'
+export { default as DashboardPage } from './DashboardPage'
+export { default as LogsPage } from './LogsPage'
+export { default as RulesPage } from './RulesPage'
