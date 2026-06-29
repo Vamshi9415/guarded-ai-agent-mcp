@@ -41,13 +41,15 @@ export class ApiError extends Error {
   }
 }
 
+
+
 function getApiBaseUrl() {
-  // FIXED: Using the exact literal string allows Vite to statically replace this 
-  // with your Render URL during Vercel's production build.
+  // @ts-ignore
   const prodUrl = import.meta.env.VITE_API_BASE_URL;
 
   return prodUrl && prodUrl.trim() ? prodUrl.trim() : DEFAULT_API_BASE_URL;
 }
+
 
 function extractErrorMessage(data: unknown): string | null {
   if (!data || typeof data !== 'object') {
