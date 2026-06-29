@@ -41,15 +41,15 @@ export class ApiError extends Error {
   }
 }
 
-function getApiBaseUrl() {
-  const env = import.meta as ImportMeta & {
-    env?: {
-      VITE_API_BASE_URL?: string
-    }
-  }
 
-  return env.env?.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL
+
+function getApiBaseUrl() {
+  // @ts-ignore
+  const prodUrl = import.meta.env.VITE_API_BASE_URL;
+
+  return prodUrl && prodUrl.trim() ? prodUrl.trim() : DEFAULT_API_BASE_URL;
 }
+
 
 function extractErrorMessage(data: unknown): string | null {
   if (!data || typeof data !== 'object') {
