@@ -42,13 +42,11 @@ export class ApiError extends Error {
 }
 
 function getApiBaseUrl() {
-  const env = import.meta as ImportMeta & {
-    env?: {
-      VITE_API_BASE_URL?: string
-    }
-  }
+  // FIXED: Using the exact literal string allows Vite to statically replace this 
+  // with your Render URL during Vercel's production build.
+  const prodUrl = import.meta.env.VITE_API_BASE_URL;
 
-  return env.env?.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL
+  return prodUrl && prodUrl.trim() ? prodUrl.trim() : DEFAULT_API_BASE_URL;
 }
 
 function extractErrorMessage(data: unknown): string | null {
