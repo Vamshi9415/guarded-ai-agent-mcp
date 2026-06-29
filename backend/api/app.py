@@ -66,7 +66,12 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],    # tighten to specific origins before production
+        allow_origins=[
+        "https://guarded-ai-agent-mcp.vercel.app",  # Your production Vercel site
+        "http://localhost:5173",                     # For local frontend development
+        "http://localhost:8000"                      # For local backend testing
+    ],
+        # allow_origins=["*"],    # tighten to specific origins before production
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
