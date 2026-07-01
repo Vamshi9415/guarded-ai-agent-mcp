@@ -67,11 +67,18 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
-        "https://guarded-ai-agent-mcp.vercel.app",  # Your production Vercel site
-        "http://localhost:5173",                     # For local frontend development
-        "http://localhost:8000"                      # For local backend testing
-    ],
-        # allow_origins=["*"],    # tighten to specific origins before production
+            "https://lively-pebble-0a440c100.7.azurestaticapps.net",
+            "https://guarded-ai-agent-mcp.vercel.app",
+            "https://guarded-ai-agent-mcp.onrender.com",
+            "http://localhost:4173",
+            "http://localhost:4174",
+            "http://localhost:5173",
+            "http://localhost:8000",
+            "http://127.0.0.1:4173",
+            "http://127.0.0.1:4174",
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:8000",
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

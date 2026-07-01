@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getBudget, getConversationBudgetState, listBudgets, resetBudget, updateBudget } from '../api';
+import { getBudget, getConversationBudgetState, getDefaultBudget, listBudgets, resetBudget, updateBudget } from '../api';
 import type { BudgetUpdate } from '../types/budgets';
 
 export const BUDGETS_QUERY_KEY = ['budgets'] as const;
@@ -7,7 +7,13 @@ export const BUDGETS_QUERY_KEY = ['budgets'] as const;
 export function useBudgets() {
   return useQuery({
     queryKey: BUDGETS_QUERY_KEY,
-    queryFn: listBudgets,
+    queryFn: async () => {
+      const [defaultBudget, budgets] = await Promise.all([
+        getDefaultBudget(),
+        listBudgets(),
+      ]);
+      return [defaultBudget, ...budgets];
+    },
     staleTime: 10_000,
   });
 }
