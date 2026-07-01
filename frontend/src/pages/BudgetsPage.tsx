@@ -35,18 +35,24 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import EditIcon from '@mui/icons-material/Edit';
 import SearchIcon from '@mui/icons-material/Search';
 
-import { BUDGETS_QUERY_KEY, useBudgets, useUpdateBudget, useResetBudget } from '../hooks/useBudgets';
-import { getConversationBudgetState } from '../api';
+import { getBudget, getConversationBudgetState } from '../api';
+import { useResetBudget, useUpdateBudget } from '../hooks/useBudgets';
+import { useConversations } from '../hooks/useConversation';
 import type { BudgetResponse } from '../types/budgets';
 
 function UsageBar({ used, max }: { used: number; max: number }) {
   const pct = max > 0 ? Math.min((used / max) * 100, 100) : 0;
   const color = pct >= 80 ? 'error' : pct >= 50 ? 'warning' : 'primary';
+
   return (
     <Box sx={{ minWidth: 120 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.25 }}>
-        <Typography variant="caption" color={pct >= 80 ? 'error.main' : 'text.secondary'}>{pct.toFixed(0)}%</Typography>
-        <Typography variant="caption" color="text.secondary">{used.toLocaleString()} / {max.toLocaleString()}</Typography>
+        <Typography variant="caption" color={pct >= 80 ? 'error.main' : 'text.secondary'}>
+          {pct.toFixed(0)}%
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {used.toLocaleString()} / {max.toLocaleString()}
+        </Typography>
       </Box>
       <LinearProgress variant="determinate" value={pct} color={color} sx={{ height: 6, borderRadius: 3 }} />
     </Box>
@@ -54,15 +60,24 @@ function UsageBar({ used, max }: { used: number; max: number }) {
 }
 
 export default function BudgetsPage() {
-  const { data: budgets = [], isLoading, isError, error } = useBudgets();
+  const { data: conversations = [], isLoading: conversationsLoading, isError, error } = useConversations();
   const updateBudget = useUpdateBudget();
   const resetBudget = useResetBudget();
 
+  const budgetQueries = useQueries({
+    queries: conversations.map((conversation) => ({
+      queryKey: ['budgets', conversation.conversation_id] as const,
+      queryFn: () => getBudget(conversation.conversation_id),
+      enabled: Boolean(conversation.conversation_id),
+      staleTime: 10_000,
+    })),
+  });
+
   const budgetStateQueries = useQueries({
-    queries: budgets.map((budget) => ({
-      queryKey: [...BUDGETS_QUERY_KEY, budget.conversationid, 'state'] as const,
-      queryFn: () => getConversationBudgetState(budget.conversationid as string),
-      enabled: Boolean(budget.conversationid),
+    queries: conversations.map((conversation) => ({
+      queryKey: ['budgets', conversation.conversation_id, 'state'] as const,
+      queryFn: () => getConversationBudgetState(conversation.conversation_id),
+      enabled: Boolean(conversation.conversation_id),
       staleTime: 10_000,
     })),
   });
@@ -70,27 +85,34 @@ export default function BudgetsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-
   const [editOpen, setEditOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<BudgetResponse | null>(null);
   const [newMax, setNewMax] = useState('');
-
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
-    open: false, message: '', severity: 'success',
+    open: false,
+    message: '',
+    severity: 'success',
   });
 
   const notify = (message: string, severity: 'success' | 'error') =>
     setSnackbar({ open: true, message, severity });
 
-  const usageByConversationId: Record<string, number> = useMemo(() => {
+  const budgets = useMemo(() => {
+    return conversations.map((conversation, index) => {
+      return budgetQueries[index]?.data ?? {
+        conversationid: conversation.conversation_id,
+        maxtokens: 0,
+      };
+    });
+  }, [budgetQueries, conversations]);
+
+  const usageByConversationId = useMemo(() => {
     const result: Record<string, number> = {};
-    budgets.forEach((budget, index) => {
-      if (budget.conversationid) {
-        result[budget.conversationid] = budgetStateQueries[index]?.data?.totaltokens ?? 0;
-      }
+    conversations.forEach((conversation, index) => {
+      result[conversation.conversation_id] = budgetStateQueries[index]?.data?.totaltokens ?? 0;
     });
     return result;
-  }, [budgets, budgetStateQueries]);
+  }, [budgetStateQueries, conversations]);
 
   const totalBudget = budgets.reduce((sum, budget) => sum + budget.maxtokens, 0);
   const totalUsed = Object.values(usageByConversationId).reduce((sum, value) => sum + value, 0);
@@ -105,11 +127,13 @@ export default function BudgetsPage() {
 
   async function handleEditSave() {
     if (!editTarget?.conversationid) return;
+
     const maxTokens = parseInt(newMax, 10);
     if (!maxTokens || maxTokens <= 0) {
       notify('Enter a valid token limit.', 'error');
       return;
     }
+
     try {
       await updateBudget.mutateAsync({
         conversationId: editTarget.conversationid,
@@ -134,13 +158,17 @@ export default function BudgetsPage() {
   return (
     <Stack spacing={3}>
       <Box>
-        <Typography variant="h4" fontWeight={700}>Budgets</Typography>
-        <Typography variant="body1" color="text.secondary">Inspect and adjust conversation token budgets.</Typography>
+        <Typography variant="h4" fontWeight={700}>
+          Budgets
+        </Typography>
+        <Typography variant="body1" color="text.secondary">
+          Inspect and adjust conversation token budgets.
+        </Typography>
       </Box>
 
-      {isError && (
-        <Alert severity="error">{error instanceof Error ? error.message : 'Failed to load budgets.'}</Alert>
-      )}
+      {isError ? (
+        <Alert severity="error">{error instanceof Error ? error.message : 'Failed to load conversations.'}</Alert>
+      ) : null}
 
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6} lg={3}>
@@ -148,54 +176,101 @@ export default function BudgetsPage() {
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
                 <Box>
-                  <Typography variant="overline" color="text.secondary">Total Budget</Typography>
-                  {isLoading ? <Skeleton width={80} height={40} /> : <Typography variant="h5" fontWeight={700}>{totalBudget.toLocaleString()}</Typography>}
+                  <Typography variant="overline" color="text.secondary">
+                    Total Budget
+                  </Typography>
+                  {conversationsLoading ? (
+                    <Skeleton width={80} height={40} />
+                  ) : (
+                    <Typography variant="h5" fontWeight={700}>
+                      {totalBudget.toLocaleString()}
+                    </Typography>
+                  )}
                 </Box>
                 <AccountBalanceWalletIcon color="primary" />
               </Stack>
-              <Typography variant="caption" color="text.secondary">across {budgets.length} conversations</Typography>
+              <Typography variant="caption" color="text.secondary">
+                across {conversations.length} conversations
+              </Typography>
             </CardContent>
           </Card>
         </Grid>
+
         <Grid item xs={12} sm={6} lg={3}>
           <Card>
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
                 <Box>
-                  <Typography variant="overline" color="text.secondary">Remaining Tokens</Typography>
-                  {isLoading ? <Skeleton width={80} height={40} /> : <Typography variant="h5" fontWeight={700} color={remaining < totalBudget * 0.2 ? 'error.main' : 'inherit'}>{remaining.toLocaleString()}</Typography>}
+                  <Typography variant="overline" color="text.secondary">
+                    Remaining Tokens
+                  </Typography>
+                  {conversationsLoading ? (
+                    <Skeleton width={80} height={40} />
+                  ) : (
+                    <Typography
+                      variant="h5"
+                      fontWeight={700}
+                      color={remaining < totalBudget * 0.2 ? 'error.main' : 'inherit'}
+                    >
+                      {remaining.toLocaleString()}
+                    </Typography>
+                  )}
                 </Box>
                 <TokenIcon color="success" />
               </Stack>
-              <Typography variant="caption" color="text.secondary">estimated across all conversations</Typography>
+              <Typography variant="caption" color="text.secondary">
+                estimated across all conversations
+              </Typography>
             </CardContent>
           </Card>
         </Grid>
+
         <Grid item xs={12} sm={6} lg={3}>
           <Card>
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
                 <Box>
-                  <Typography variant="overline" color="text.secondary">Tokens Used</Typography>
-                  {isLoading ? <Skeleton width={80} height={40} /> : <Typography variant="h5" fontWeight={700}>{totalUsed.toLocaleString()}</Typography>}
+                  <Typography variant="overline" color="text.secondary">
+                    Tokens Used
+                  </Typography>
+                  {conversationsLoading ? (
+                    <Skeleton width={80} height={40} />
+                  ) : (
+                    <Typography variant="h5" fontWeight={700}>
+                      {totalUsed.toLocaleString()}
+                    </Typography>
+                  )}
                 </Box>
                 <TrendingUpIcon color="warning" />
               </Stack>
-              <Typography variant="caption" color="text.secondary">{totalBudget > 0 ? ((totalUsed / totalBudget) * 100).toFixed(1) : 0}% of total budget consumed</Typography>
+              <Typography variant="caption" color="text.secondary">
+                {totalBudget > 0 ? ((totalUsed / totalBudget) * 100).toFixed(1) : 0}% of total budget consumed
+              </Typography>
             </CardContent>
           </Card>
         </Grid>
+
         <Grid item xs={12} sm={6} lg={3}>
           <Card>
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
                 <Box>
-                  <Typography variant="overline" color="text.secondary">Active Conversations</Typography>
-                  {isLoading ? <Skeleton width={60} height={40} /> : <Typography variant="h5" fontWeight={700}>{budgets.length}</Typography>}
+                  <Typography variant="overline" color="text.secondary">
+                    Active Conversations
+                  </Typography>
+                  {conversationsLoading ? (
+                    <Skeleton width={60} height={40} />
+                  ) : (
+                    <Typography variant="h5" fontWeight={700}>
+                      {conversations.length}
+                    </Typography>
+                  )}
                 </Box>
                 <AccountBalanceWalletIcon color="action" />
               </Stack>
-              <Typography variant="caption" color="text.secondary">with configured token limits</Typography>
+              <Typography variant="caption" color="text.secondary">
+                with configured token limits
+              </Typography>
             </CardContent>
           </Card>
         </Grid>
@@ -209,19 +284,31 @@ export default function BudgetsPage() {
           setSearch(e.target.value);
           setPage(0);
         }}
-        InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
+        InputProps={{
+          startAdornment: (
+            <InputAdornment position="start">
+              <SearchIcon fontSize="small" />
+            </InputAdornment>
+          ),
+        }}
         sx={{ maxWidth: 320 }}
       />
 
-      {isLoading ? (
+      {conversationsLoading ? (
         <Stack spacing={1}>
-          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} variant="rectangular" height={56} sx={{ borderRadius: 1 }} />)}
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Skeleton key={index} variant="rectangular" height={56} sx={{ borderRadius: 1 }} />
+          ))}
         </Stack>
       ) : filtered.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 6, textAlign: 'center' }}>
           <TokenIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 2 }} />
-          <Typography variant="h6" gutterBottom>No budget configurations found</Typography>
-          <Typography variant="body2" color="text.secondary">Budget entries will appear here once conversations are tracked.</Typography>
+          <Typography variant="h6" gutterBottom>
+            No budget configurations found
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Start a conversation first. Budget rows will appear for active conversations.
+          </Typography>
         </Paper>
       ) : (
         <Paper variant="outlined">
@@ -241,11 +328,20 @@ export default function BudgetsPage() {
                   const conversationId = budget.conversationid ?? 'default';
                   const used = usageByConversationId[budget.conversationid ?? ''] ?? 0;
                   const rowRemaining = budget.maxtokens - used;
+
                   return (
                     <TableRow key={conversationId} hover>
-                      <TableCell><Typography variant="body2" fontFamily="monospace">{conversationId}</Typography></TableCell>
-                      <TableCell><Typography variant="body2">{budget.maxtokens.toLocaleString()} tokens</Typography></TableCell>
-                      <TableCell><UsageBar used={used} max={budget.maxtokens} /></TableCell>
+                      <TableCell>
+                        <Typography variant="body2" fontFamily="monospace">
+                          {conversationId}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">{budget.maxtokens.toLocaleString()} tokens</Typography>
+                      </TableCell>
+                      <TableCell>
+                        <UsageBar used={used} max={budget.maxtokens} />
+                      </TableCell>
                       <TableCell>
                         <Typography variant="body2" color={rowRemaining < budget.maxtokens * 0.2 ? 'error.main' : 'inherit'}>
                           {rowRemaining.toLocaleString()}
@@ -289,6 +385,7 @@ export default function BudgetsPage() {
               </TableBody>
             </Table>
           </TableContainer>
+
           <TablePagination
             component="div"
             count={filtered.length}
@@ -331,7 +428,9 @@ export default function BudgetsPage() {
         onClose={() => setSnackbar((state) => ({ ...state, open: false }))}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
-        <Alert severity={snackbar.severity} onClose={() => setSnackbar((state) => ({ ...state, open: false }))}>{snackbar.message}</Alert>
+        <Alert severity={snackbar.severity} onClose={() => setSnackbar((state) => ({ ...state, open: false }))}>
+          {snackbar.message}
+        </Alert>
       </Snackbar>
     </Stack>
   );
