@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { useQueries } from '@tanstack/react-query';
 import {
   Alert,
   Box,
@@ -34,7 +35,8 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import EditIcon from '@mui/icons-material/Edit';
 import SearchIcon from '@mui/icons-material/Search';
 
-import { useBudgets, useUpdateBudget, useResetBudget } from '../hooks/useBudgets';
+import { BUDGETS_QUERY_KEY, useBudgets, useUpdateBudget, useResetBudget } from '../hooks/useBudgets';
+import { getConversationBudgetState } from '../api';
 import type { BudgetResponse } from '../types/budgets';
 
 function UsageBar({ used, max }: { used: number; max: number }) {
@@ -51,16 +53,19 @@ function UsageBar({ used, max }: { used: number; max: number }) {
   );
 }
 
-function getStableMockUsage(conversationId: string, maxTokens: number) {
-  const hash = conversationId.split('').reduce((acc, char, index) => acc + char.charCodeAt(0) * (index + 1), 0);
-  const ratio = ((hash % 55) + 25) / 100;
-  return Math.min(Math.floor(maxTokens * ratio), maxTokens);
-}
-
 export default function BudgetsPage() {
   const { data: budgets = [], isLoading, isError, error } = useBudgets();
   const updateBudget = useUpdateBudget();
   const resetBudget = useResetBudget();
+
+  const budgetStateQueries = useQueries({
+    queries: budgets.map((budget) => ({
+      queryKey: [...BUDGETS_QUERY_KEY, budget.conversationid, 'state'] as const,
+      queryFn: () => getConversationBudgetState(budget.conversationid as string),
+      enabled: Boolean(budget.conversationid),
+      staleTime: 10_000,
+    })),
+  });
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
@@ -77,18 +82,18 @@ export default function BudgetsPage() {
   const notify = (message: string, severity: 'success' | 'error') =>
     setSnackbar({ open: true, message, severity });
 
-  const mockUsage: Record<string, number> = useMemo(() => {
+  const usageByConversationId: Record<string, number> = useMemo(() => {
     const result: Record<string, number> = {};
-    budgets.forEach((budget) => {
+    budgets.forEach((budget, index) => {
       if (budget.conversationid) {
-        result[budget.conversationid] = getStableMockUsage(budget.conversationid, budget.maxtokens);
+        result[budget.conversationid] = budgetStateQueries[index]?.data?.totaltokens ?? 0;
       }
     });
     return result;
-  }, [budgets]);
+  }, [budgets, budgetStateQueries]);
 
   const totalBudget = budgets.reduce((sum, budget) => sum + budget.maxtokens, 0);
-  const totalUsed = Object.values(mockUsage).reduce((sum, value) => sum + value, 0);
+  const totalUsed = Object.values(usageByConversationId).reduce((sum, value) => sum + value, 0);
   const remaining = totalBudget - totalUsed;
 
   const filtered = useMemo(() => {
@@ -234,7 +239,7 @@ export default function BudgetsPage() {
               <TableBody>
                 {paginated.map((budget) => {
                   const conversationId = budget.conversationid ?? 'default';
-                  const used = mockUsage[budget.conversationid ?? ''] ?? 0;
+                  const used = usageByConversationId[budget.conversationid ?? ''] ?? 0;
                   const rowRemaining = budget.maxtokens - used;
                   return (
                     <TableRow key={conversationId} hover>
