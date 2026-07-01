@@ -30,7 +30,10 @@ jobs:
           # For more information regarding Static Web App workflow configurations, please visit: https://aka.ms/swaworkflowconfig
           app_location: "./frontend" # App source code path
           api_location: "" # Api source code path - optional
-          output_location: "build" # Built app content directory - optional
+          output_location: "dist" # <--- 1. CHANGED THIS TO "dist"
+          ###### End of Repository/Build Configurations ######
+        env: # <--- 2. ADDED THIS ENV BLOCK
+          VITE_API_BASE_URL: "https://amoriqbackend-dqd9hyafgre3hxdn.centralindia-01.azurewebsites.net"
           ###### End of Repository/Build Configurations ######
 
   close_pull_request_job:
