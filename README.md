@@ -728,17 +728,3 @@ flowchart TD
 ```
 
 ---
-
-## Known Limitations
-
-1. **No per-transport error isolation at startup** — if any MCP server fails to connect during `MCPManager.connect_all()`, the entire startup fails. A production implementation would catch per-transport errors and continue with the available servers.
-
-2. **stdio MCP server state is ephemeral** — the `DB_STORE` in `server.py` is a Python dict in the subprocess's memory. Records created in one session are lost when the process restarts. A persistent backing store (SQLite, Redis) would fix this.
-
-3. **Approval polling is synchronous blocking** — `wait_for_resolution()` ties up the async event loop's task for the duration of the wait. At high concurrency, many simultaneous approval waits would occupy many tasks. An event/condition variable approach would be more efficient.
-
-4. **`ToolRegistry.discover()` raises on duplicate tool names** — if two MCP servers expose a tool with the same name, startup fails hard. A namespacing scheme (e.g., `server_name::tool_name`) would resolve this at the cost of changing the tool name the LLM sees.
-
-5. **No streaming** — the chat endpoint returns the full agent reply as a single JSON response. Streaming via SSE or WebSockets would improve perceived latency for multi-turn tool use loops.
-
-6. **Local-crud state is not shared across processes** — the stdio subprocess is spawned per-backend-process. On multi-worker deployments, each worker has its own isolated DB_STORE.
