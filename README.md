@@ -24,7 +24,6 @@
 11. [Environment Variables](#environment-variables)
 12. [Deployment](#deployment)
 13. [Design Decisions & Tradeoffs](#design-decisions--tradeoffs)
-14. [Known Limitations](#known-limitations)
 
 ---
 
